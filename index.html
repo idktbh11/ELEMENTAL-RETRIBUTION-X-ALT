@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
+  <meta name="theme-color" content="#05060c">
+  <title>ELEMENTAL RETRIBUTION X</title>
+  <link rel="icon" type="image/png" href="assets/images/favicon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="game" tabindex="0" aria-label="Elemental Retribution X main menu"></canvas>
+  <noscript>ELEMENTAL RETRIBUTION X needs JavaScript enabled. The elements insist.</noscript>
+
+  <!-- Core -->
+  <script src="js/core/config.js"></script>
+  <script src="js/core/util.js"></script>
+  <script src="js/core/events.js"></script>
+  <script src="js/core/storage.js"></script>
+
+  <!-- Rendering -->
+  <script src="js/render/color.js"></script>
+  <script src="js/render/pixel-buffer.js"></script>
+  <script src="js/render/display.js"></script>
+  <script src="js/render/font.js"></script>
+  <script src="js/render/sprites.js"></script>
+  <script src="js/render/player-sprite.js"></script>
+  <script src="js/render/player-side.js"></script>
+  <script src="js/render/figure-sprite.js"></script>
+
+  <!-- Data / persistence / input -->
+  <script src="js/core/assets.js"></script>
+  <script src="js/core/settings.js"></script>
+  <script src="js/core/saves.js"></script>
+  <script src="js/core/admin.js"></script>
+  <script src="js/input/input.js"></script>
+  <script src="js/input/keybinds.js"></script>
+  <script src="js/input/touch.js"></script>
+
+  <!-- Audio -->
+  <script src="js/audio/audio.js"></script>
+  <script src="js/audio/sfx.js"></script>
+  <script src="js/audio/music.js"></script>
+  <script src="js/audio/ambience.js"></script>
+  <script src="js/audio/game-audio.js"></script>
+  <script src="js/audio/reveal-audio.js"></script>
+  <script src="js/audio/sound-moves.js"></script>
+  <script src="js/audio/element-sfx.js"></script>
+  <script src="js/audio/void-audio.js"></script>
+  <script src="js/audio/world-audio.js"></script>
+
+  <!-- UI -->
+  <script src="js/ui/theme.js"></script>
+  <script src="js/ui/widgets.js"></script>
+  <script src="js/ui/overlay.js"></script>
+
+  <!-- Scenes & menu worlds -->
+  <script src="js/scenes/scene-manager.js"></script>
+  <script src="js/backgrounds/paint.js"></script>
+  <script src="js/backgrounds/backgrounds.js"></script>
+  <script src="js/backgrounds/actors.js"></script>
+  <script src="js/backgrounds/env-sky.js"></script>
+  <script src="js/backgrounds/env-village.js"></script>
+  <script src="js/backgrounds/env-tree.js"></script>
+  <script src="js/backgrounds/env-peaks.js"></script>
+  <script src="js/data/neonjam.js"></script>
+  <script src="js/backgrounds/env-neon.js"></script>
+
+  <!-- Content -->
+  <script src="js/data/elements.js"></script>
+  <script src="js/data/flavor.js"></script>
+  <script src="js/data/help.js"></script>
+  <script src="js/data/credits.js"></script>
+  <script src="js/data/character.js"></script>
+  <script src="js/data/armor.js"></script>
+  <script src="js/data/items.js"></script>
+  <script src="js/game/inventory.js"></script>
+  <script src="js/data/kits/_kit.js"></script>
+  <script src="js/data/kits/kits-1.js"></script>
+  <script src="js/data/kits/kits-2.js"></script>
+  <script src="js/data/kits/kits-3.js"></script>
+  <script src="js/data/kits/kits-4.js"></script>
+  <script src="js/data/kits/kits-5.js"></script>
+  <script src="js/data/kits/guards.js"></script>
+  <script src="js/data/awakened/_awk.js"></script>
+  <script src="js/data/awakened/awk-1.js"></script>
+  <script src="js/data/awakened/awk-2.js"></script>
+  <script src="js/data/awakened/awk-3.js"></script>
+  <script src="js/data/awakened/awk-4.js"></script>
+  <script src="js/data/awakened/awk-5.js"></script>
+
+  <!-- Gameplay -->
+  <script src="js/game/engine.js"></script>
+  <script src="js/game/level-cave.js"></script>
+  <script src="js/game/level-deep.js"></script>
+  <script src="js/game/level-vault.js"></script>
+  <script src="js/game/level-void.js"></script>
+  <script src="js/game/level-world1.js"></script>
+  <script src="js/game/props.js"></script>
+  <script src="js/game/player.js"></script>
+  <script src="js/game/enemies.js"></script>
+  <script src="js/game/abilities.js"></script>
+  <script src="js/game/ultimate.js"></script>
+  <script src="js/game/awakening.js"></script>
+  <script src="js/game/training.js"></script>
+  <script src="js/game/world-fall.js"></script>
+  <script src="js/game/chaos-world.js"></script>
+  <script src="js/game/dialogue.js"></script>
+  <script src="js/render/symbols.js"></script>
+  <script src="js/render/symbols-awakened.js"></script>
+  <script src="js/game/hud.js"></script>
+  <script src="js/game/achievements.js"></script>
+  <script src="js/game/story-cave.js"></script>
+  <script src="js/game/story-deep.js"></script>
+  <script src="js/game/story-vault.js"></script>
+  <script src="js/game/story-void.js"></script>
+  <script src="js/game/story-world.js"></script>
+  <script src="js/game/game-screen.js"></script>
+
+  <!-- Screens -->
+  <script src="js/screens/panel-screen.js"></script>
+  <script src="js/screens/main-menu.js"></script>
+  <script src="js/screens/play.js"></script>
+  <script src="js/screens/settings.js"></script>
+  <script src="js/screens/help.js"></script>
+  <script src="js/screens/credits.js"></script>
+  <script src="js/screens/confirm.js"></script>
+  <script src="js/screens/game-menus.js"></script>
+  <script src="js/screens/skill-tree.js"></script>
+  <script src="js/screens/admin.js"></script>
+  <script src="js/screens/characters.js"></script>
+  <script src="js/screens/creator.js"></script>
+
+  <!-- Boot -->
+  <script src="js/main.js"></script>
+</body>
+</html>

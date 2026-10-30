@@ -1,0 +1,30 @@
+{
+    "app_name": "ELEMENTAL RETRIBUTION X",
+    "description": "nothing here to see bud",
+    "main": "index.html",
+    "name": "elemental-retribution-x",
+    "webkit": {},
+    "window": {
+        "frame": true,
+        "icon": "ChatGPT Image Oct 9, 2026, 10_45_39 PM.png",
+        "id": "ELEMENTAL RETRIBUTION X",
+        "resizable": true,
+        "show": true,
+        "show_in_taskbar": true,
+        "title": "ELEMENTAL RETRIBUTION X",
+        "visible": true
+    },
+    "version": "1.1.0",
+    "scripts": {
+        "start": "node electron/start.js",
+        "phone": "node electron/start.js --phone",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "type": "commonjs",
+    "devDependencies": {
+        "electron": "^44.7.0"
+    }
+}
