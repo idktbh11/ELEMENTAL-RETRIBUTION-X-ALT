@@ -94,6 +94,7 @@
   const HQ_PEOPLE = [
     { id: 'dot', x: 11.25 },
     { id: 'kev', x: 17 },
+    { id: 'nova', x: 58 },
     { id: 'brenda', x: 23.75 },
     { id: 'steve', x: 32, pose: 'sit' },
     { id: 'atlas', x: 38 },

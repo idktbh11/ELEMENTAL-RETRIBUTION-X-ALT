@@ -409,6 +409,14 @@
 
   // the HQ staff (talked to through the same NPC system as the miners)
   Object.assign(MINERS, {
+     nova: {
+      name: 'INTERN NOVA', pitch: 1.1,
+      look: { gender: 1, skin: 4, hair: 3, hairColor: 4, eyes: 2, outfit: 6, outfitColor: 8, pants: 2, hat: 'hard' },
+      lines: [
+        ["Hi! I'm Nova, HQ's newest intern. Don't ask what I do. I'm still finding out."],
+        ["Psst. Your element is only the start. Keep an eye on the skill tree (T)."],
+      ],
+    },
     dot: {
       name: 'RECEPTIONIST DOT', pitch: 1.3,
       look: { gender: 1, skin: 2, hair: 2, hairColor: 3, eyes: 1, outfit: 3, outfitColor: 5, pants: 3 },
