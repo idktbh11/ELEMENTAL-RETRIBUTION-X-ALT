@@ -93,7 +93,7 @@
       // far, snowy mountains (blue in the haze)
       const far = P.mountains(rng, span(0.05), 150, { peaks: 7, minH: 60, maxH: 138, rock: ['#a6b8e0', '#8094c8', '#93a6d4'], snow: ['#f4f8ff', '#c8d4f0'], snowLine: 92, rim: '#ffffff', fade: { color: '#b8d0f0', start: 96, end: 150 }, lean: 0.5, jag: 0.8 });
       // nearer mountains: green-grey, a little snow on the tallest
-      const mid = P.mountains(rng, span(0.1), 120, { peaks: 6, minH: 34, maxH: 92, rock: ['#7aa28a', '#5a8270', '#6a927c'], snow: ['#eef8f4', '#b8d0c8'], snowLine: 82, rim: '#c8f0d8', fade: { color: '#8ab8a4', start: 74, end: 120 }, lean: 0.55, jag: 0.9 });
+      const mid = P.mountains(rng, span(0.1), 120, { peaks: 9, minH: 34, maxH: 92, rock: ['#7aa28a', '#5a8270', '#6a927c'], snow: ['#eef8f4', '#b8d0c8'], snowLine: 82, rim: '#c8f0d8', fade: { color: '#8ab8a4', start: 74, end: 120 }, lean: 0.55, jag: 0.9 });
       // forest hills: rolling, with a fringe of trees along the top
       const hills = P.hills(rng, span(0.2), 90, { base: 46, amp: 26, freq: 0.012, colors: ['#5aa850', '#3e8a46', '#2e6e40'] });
       this.forest(hills, rng, ['#2e6e40', '#245a36', '#3a7a46'], 0.85);
