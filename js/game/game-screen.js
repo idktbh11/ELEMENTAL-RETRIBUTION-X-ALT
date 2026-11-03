@@ -259,6 +259,7 @@
           ERX.Audio.playMusic('world1');
           ERX.Audio.setAmbience('world1');
         }
+        for (const s of L.enemySpawns) this.enemies.push(ERX.Enemies.create(this, s));
       } else {
         const L = this.level;
         const at = opts.at === 'hall' ? L.checkpoints[L.checkpoints.length - 1] : opts.at === 'elevator' ? { x: L.elevator.x0 - 24, y: L.elevator.floorY } : L.spawn;
