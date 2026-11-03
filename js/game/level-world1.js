@@ -301,7 +301,9 @@
       this.signs = [{ x: 52 * TS + 8, y: this.floorY, text: 'WORLD 1  ->\nUnder construction.\nAsk the slime. (Do not ask the slime.)', read: false }];
       this.chalk = [];
       this.npcs = [];
-      this.enemySpawns = [];
+      this.enemySpawns = [
+        { type: 'slime', x: 30 * TS },
+      ];
       this.dark = 0;
       // critters + swaying grass (set up in buildLife)
       this.grass = null;
