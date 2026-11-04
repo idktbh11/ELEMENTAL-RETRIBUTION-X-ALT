@@ -299,6 +299,68 @@
     }
   }
 
+  // ================================================================= GOBLIN
+  // Placeholder goblin: slime-shaped body for now, walks instead of hopping.
+  class Goblin extends Enemy {
+    constructor(game, spawn) {
+      super(game, spawn);
+      this.w = 12;
+      this.h = 9;
+      this.x = spawn.x - this.w / 2;
+      const gy = game.level._groundBelow(Math.floor(spawn.x / 16), 2) * 16;
+      this.y = gy - this.h;
+      this.maxHp = this.hp = 20;
+      this.damage = 6;
+      this.xp = 12;
+      this.gold = 4;
+      this.knockback = 1;
+      this.color = '#4f9a3c';
+      this.wanderT = 0;
+      this.wanderDir = 1;
+      this.squash = 0;
+      this.drawOffset = 2;
+      this.hurtSfx = 'slimeHurt';
+      this.dieSfx = 'slimeDie';
+    }
+    think(dt) {
+      const p = this.target();
+      const dx = p.cx - this.cx, dy = p.feet - (this.y + this.h);
+      const aggro = Math.abs(dx) < 150 && Math.abs(dy) < 70;
+      if (this.onGround && this.hurtT <= 0) {
+        if (aggro) {
+          // chase: face the player and walk at a steady pace
+          this.facing = Math.sign(dx) || 1;
+          this.vx = this.facing * 45;
+        } else {
+          // wander: walk one way for a bit, then turn around
+          this.wanderT -= dt;
+          if (this.wanderT <= 0) {
+            this.wanderDir = -this.wanderDir;
+            this.wanderT = U.lerp(1.5, 3, Math.random());
+          }
+          this.facing = this.wanderDir;
+          this.vx = this.wanderDir * 20;
+        }
+      } else if (this.onGround) {
+        // hurt: let the knockback slide to a stop
+        const f = 500 * dt;
+        this.vx = Math.abs(this.vx) <= f ? 0 : this.vx - Math.sign(this.vx) * f;
+      }
+      const was = this.onGround;
+      this.vy = Math.min(this.vy + 900 * dt, 400);
+      Physics.move(this.game.level, this, dt);
+      if (!was && this.onGround) this.squash = 0.15;
+      this.squash = Math.max(0, this.squash - dt);
+    }
+    sprite() {
+      let frame = 0;
+      if (!this.onGround) frame = 2;
+      else if (this.squash > 0) frame = 1;
+      else if (Math.floor(this.t * 2) % 2) frame = 0;
+      return slimeSprite(this.color, frame, false);
+    }
+  }
+
   // ================================================================= BAT
   const BAT_FRAMES = {
     up: ['..#........#..', '.###......###.', '#####.##.#####', '.###########..', '...#######....', '....#.##.#....'],
@@ -401,9 +463,9 @@
     }
   }
 
-  const ENEMY_TYPES = { slime: Slime, bat: Bat };
+  const ENEMY_TYPES = { slime: Slime, bat: Bat, goblin: Goblin };
   ERX.Enemies = {
-    Enemy, Slime, Bat, TYPES: ENEMY_TYPES,
+    Enemy, Slime, Bat, Goblin, TYPES: ENEMY_TYPES,
     create(game, spawn) {
       const T = ENEMY_TYPES[spawn.type];
       if (!T) return null;

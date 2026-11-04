@@ -303,6 +303,7 @@
       this.npcs = [];
       this.enemySpawns = [
         { type: 'slime', x: 30 * TS },
+        { type: 'goblin', x: 45 * TS },
       ];
       this.dark = 0;
       // critters + swaying grass (set up in buildLife)
