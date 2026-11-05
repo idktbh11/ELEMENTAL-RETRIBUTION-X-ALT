@@ -353,11 +353,7 @@
       this.squash = Math.max(0, this.squash - dt);
     }
     sprite() {
-      let frame = 0;
-      if (!this.onGround) frame = 2;
-      else if (this.squash > 0) frame = 1;
-      else if (Math.floor(this.t * 2) % 2) frame = 0;
-      return slimeSprite(this.color, frame, false);
+      return goblinSprite(this.color);
     }
   }
 
@@ -379,6 +375,30 @@
     b.set(cx - 1, ey, c32('#ff4a4a')); b.set(cx + 1, ey, c32('#ff4a4a'));
     b.outline(c32(INK));
     const cv = b.toCanvas();
+    cache.set(key, cv);
+    return cv;
+  }
+
+  // Goblin pixel art: 12 wide, 9 tall. '#' = solid, '.' = empty (the holes are the eyes).
+  const GOBLIN_ROWS = [
+    '#..........#',
+    '##........##',
+    '.##########.',
+    '.##.#..#.##.',
+    '.##########.',
+    '..########..',
+    '.##########.',
+    '############',
+    '###..##..###',
+  ];
+  function goblinSprite(color) {
+    const key = 'goblin' + color;
+    if (cache.has(key)) return cache.get(key);
+    const rows = GOBLIN_ROWS;
+    const g = new PB(rows[0].length + 2, rows.length + 2);
+    rows.forEach((r, y) => { for (let x = 0; x < r.length; x++) if (r[x] === '#') g.set(x + 1, y + 1, c32(color)); });
+    g.outline(c32(INK));
+    const cv = g.toCanvas();
     cache.set(key, cv);
     return cv;
   }
