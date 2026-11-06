@@ -305,7 +305,7 @@
     constructor(game, spawn) {
       super(game, spawn);
       this.w = 12;
-      this.h = 9;
+      this.h = 22;
       this.x = spawn.x - this.w / 2;
       const gy = game.level._groundBelow(Math.floor(spawn.x / 16), 2) * 16;
       this.y = gy - this.h;
@@ -382,13 +382,24 @@
   // Goblin pixel art: 12 wide, 9 tall. '#' = solid, '.' = empty (the holes are the eyes).
   const GOBLIN_ROWS = [
     '#..........#',
+    '#..........#',
+    '##........##',
     '##........##',
     '.##########.',
+    '.##########.',
+    '.##.#..#.##.',
     '.##.#..#.##.',
     '.##########.',
     '..########..',
+    '..########..',
+    '.##########.',
+    '.##########.',
     '.##########.',
     '############',
+    '############',
+    '############',
+    '###..##..###',
+    '###..##..###',
     '###..##..###',
   ];
   function goblinSprite(color) {
