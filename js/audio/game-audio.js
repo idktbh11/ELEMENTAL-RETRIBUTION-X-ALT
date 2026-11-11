@@ -160,6 +160,25 @@
       a.tone(d, { wave: 'square', freq: 1800, freqEnd: 300, slideTime: 0.3, t, dur: 0.3, vol: 0.04, release: 0.08, vibrato: 60, vibratoRate: 30 });
       a.noiseBurst(d, { t, dur: 0.1, vol: 0.06, type: 'bandpass', freq: 1200, release: 0.1 });
     },
+    // the goblin: a startled cackle, a heavy club whoosh, a thud in the dirt, squawks
+    goblinAlert(a, d, t) {
+      for (let i = 0; i < 3; i++) a.tone(d, { wave: 'pulse25', freq: 760 - i * 60, freqEnd: 560 - i * 60, t: t + i * 0.075, dur: 0.055, vol: 0.045, release: 0.03, vibrato: 30, vibratoRate: 30 });
+    },
+    goblinSwing(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.18, vol: 0.13, type: 'bandpass', freq: 420, freqEnd: 1500, Q: 1.3, attack: 0.03, release: 0.08 });
+      a.tone(d, { wave: 'pulse25', freq: 300, freqEnd: 520, slideTime: 0.08, t, dur: 0.08, vol: 0.035, release: 0.04 });
+    },
+    goblinThud(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 140, freqEnd: 55, t, dur: 0.09, vol: 0.14, release: 0.06 });
+      a.noiseBurst(d, { t, dur: 0.07, vol: 0.06, type: 'lowpass', freq: 600, release: 0.06 });
+    },
+    goblinHurt(a, d, t) {
+      a.tone(d, { wave: 'pulse25', freq: 820, freqEnd: 420, t, dur: 0.09, vol: 0.055, release: 0.04, vibrato: 60, vibratoRate: 32, vibratoDelay: 0.01 });
+    },
+    goblinDie(a, d, t) {
+      a.tone(d, { wave: 'pulse25', freq: 700, freqEnd: 150, slideTime: 0.42, t, dur: 0.42, vol: 0.055, release: 0.1, vibrato: 45, vibratoRate: 18 });
+      a.noiseBurst(d, { t: t + 0.05, dur: 0.12, vol: 0.07, type: 'lowpass', freq: 900, release: 0.1 });
+    },
     levelUp(a, d, t) {
       [523, 659, 784, 1046].forEach((f, i) => a.tone(d, { wave: 'pulse25', freq: f, t: t + i * 0.07, dur: 0.08, vol: 0.08, release: 0.06 }));
       a.tone(d, { wave: 'pulse25', freq: 1318, t: t + 0.3, dur: 0.3, vol: 0.08, release: 0.3, vibrato: 14, vibratoDelay: 0.1 });

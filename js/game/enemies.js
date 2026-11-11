@@ -1,7 +1,8 @@
 /*
- * Basic monsters: SLIMES (hop at you) and BATS (hang from the ceiling, then
- * swoop). Both share one base class with health, knockback, a hit flash,
- * contact damage and a death burst that awards XP.
+ * Basic monsters: SLIMES (hop at you), BATS (hang from the ceiling, then
+ * swoop) and GOBLINS (walk over, wind up and swing a club). They share one
+ * base class with health, knockback, a hit flash, contact damage and a death
+ * burst that awards XP.
  *
  * Status effects (burn, chill, blind...) from element attacks live on every
  * enemy: see applyStatus(). think(dt) should aim at this.target(), not the
@@ -165,7 +166,9 @@
     render(ctx, cam) {
       if (this._erased) return;   // erased from existence for a moment (Void's Zero Point)
       const cv = this.sprite();
-      const x = Math.round(this.cx - cv.width / 2) - cam.ix, y = Math.round(this.y + this.h - cv.height + this.drawOffset) - cam.iy;
+      // centred on the body, unless the sprite names the pixel between its feet (anchorX, drawn facing right)
+      const ax = this.anchorX === undefined ? cv.width / 2 : this.facing < 0 ? cv.width - 1 - this.anchorX : this.anchorX;
+      const x = Math.round(this.cx - ax) - cam.ix, y = Math.round(this.y + this.h - cv.height + this.drawOffset) - cam.iy;
       if (this._glitchUntil > this.game.t) glitchDraw(ctx, cv, x, y);   // glitched out (awakened Chaos)
       else ctx.drawImage(cv, x, y);
       if (this.flash > 0) {
@@ -300,7 +303,23 @@
   }
 
   // ================================================================= GOBLIN
-  // Placeholder goblin: slime-shaped body for now, walks instead of hopping.
+  // A hunched little brute with a spiked club (the art: js/render/goblin-sprite.js).
+  // It wanders about; when it spots you it hops and cackles, stomps over,
+  // winds the club back (your cue to back off, block or dash) and swings.
+  const GOB = {
+    walk: 46, wander: 20,              // px/s
+    see: [150, 70],                    // spots you inside this box (px either side, up/down)
+    forget: 1.6,                       // gives up after losing sight of you this long (s)
+    reach: 22, reachY: 18,             // starts a swing when you're this close (centre to centre)
+    close: 14,                         // stops walking this close (just short of bumping into you)
+    clubReach: 18,                     // how far in front the club hits
+    alert: 0.45, windup: 0.42, swing: 0.14, recover: 0.4, cooldown: 0.8,
+    stagger: 0.5,                      // after you interrupt a wind-up, it can't swing again for this long
+    lunge: 105,                        // the step forward on the swing (px/s)
+  };
+  /** Move v toward target by at most step (linear, unlike U.approach). */
+  const toward = (v, target, step) => (v < target ? Math.min(target, v + step) : Math.max(target, v - step));
+
   class Goblin extends Enemy {
     constructor(game, spawn) {
       super(game, spawn);
@@ -314,46 +333,135 @@
       this.xp = 12;
       this.gold = 4;
       this.knockback = 1;
-      this.color = '#4f9a3c';
-      this.wanderT = 0;
-      this.wanderDir = 1;
-      this.squash = 0;
-      this.drawOffset = 2;
-      this.hurtSfx = 'slimeHurt';
-      this.dieSfx = 'slimeDie';
+      this.skin = spawn.color || ERX.GoblinSprite.SKIN;
+      this.color = this.skin;                    // the death burst
+      this.anchorX = ERX.GoblinSprite.ANCHOR.x;  // drawn from the feet, so turning round doesn't jump a pixel
+      this.drawOffset = 1;
+      this.hurtSfx = 'goblinHurt';
+      this.dieSfx = 'goblinDie';
+      this.state = 'wander';                     // wander | alert | chase | windup | swing | recover
+      this.stateT = 0;
+      this.facing = Math.random() < 0.5 ? -1 : 1;
+      this.wanderWalk = true;
+      this.wanderT = U.lerp(0.6, 1.6, Math.random());
+      this.lostT = 0;
+      this.cooldown = 0;
+      this.stride = 0;                           // the walk cycle, driven by distance covered (no moonwalking)
+      this.swingHit = false;
     }
+
+    setState(s) { this.state = s; this.stateT = 0; }
+
     think(dt) {
       const p = this.target();
       const dx = p.cx - this.cx, dy = p.feet - (this.y + this.h);
-      const aggro = Math.abs(dx) < 150 && Math.abs(dy) < 70;
-      if (this.onGround && this.hurtT <= 0) {
-        if (aggro) {
-          // chase: face the player and walk at a steady pace
-          this.facing = Math.sign(dx) || 1;
-          this.vx = this.facing * 45;
-        } else {
-          // wander: walk one way for a bit, then turn around
-          this.wanderT -= dt;
-          if (this.wanderT <= 0) {
-            this.wanderDir = -this.wanderDir;
-            this.wanderT = U.lerp(1.5, 3, Math.random());
-          }
-          this.facing = this.wanderDir;
-          this.vx = this.wanderDir * 20;
+      const sees = Math.abs(dx) < GOB.see[0] && Math.abs(dy) < GOB.see[1];
+      this.stateT += dt;
+      this.cooldown = Math.max(0, this.cooldown - dt);
+      let want = 0;                              // the speed it's trying to walk at
+      if (this.hurtT > 0) {
+        // knocked about: whatever it was doing is cancelled (a hit breaks the wind-up),
+        // and it needs a moment to gather itself before the next swing
+        if (this.state !== 'wander' && this.state !== 'chase') { this.setState('chase'); this.cooldown = Math.max(this.cooldown, GOB.stagger); }
+      } else {
+        switch (this.state) {
+          case 'wander':
+            if (sees) { this.notice(dx); break; }
+            this.wanderT -= dt;
+            if (this.wanderWalk) want = this.facing * GOB.wander;
+            if (this.wanderT <= 0) {
+              // walk a bit, stop and look around, then head back the other way
+              this.wanderWalk = !this.wanderWalk;
+              if (this.wanderWalk) this.facing = -this.facing;
+              this.wanderT = this.wanderWalk ? U.lerp(1.2, 2.6, Math.random()) : U.lerp(0.6, 1.4, Math.random());
+            }
+            break;
+          case 'alert':
+            this.facing = Math.sign(dx) || this.facing;
+            if (this.stateT >= GOB.alert) this.setState('chase');
+            break;
+          case 'chase':
+            this.lostT = sees ? 0 : this.lostT + dt;
+            if (this.lostT > GOB.forget) { this.setState('wander'); this.wanderWalk = false; this.wanderT = 1; break; }
+            this.facing = Math.sign(dx) || this.facing;
+            if (Math.abs(dx) < GOB.reach && Math.abs(dy) < GOB.reachY && this.cooldown <= 0 && this.onGround) { this.setState('windup'); break; }
+            if (Math.abs(dx) > GOB.close) want = this.facing * GOB.walk;   // right up close it just glowers
+            break;
+          case 'windup':
+            if (this.stateT >= GOB.windup) {
+              this.setState('swing');
+              this.swingHit = false;
+              this.vx = this.roomAhead() ? this.facing * GOB.lunge : 0;
+              sfx('goblinSwing');
+            }
+            break;
+          case 'swing':
+            if (!this.roomAhead()) this.vx = 0;   // the lunge stops short of you rather than barging through
+            this.swingAt();
+            if (this.stateT >= GOB.swing) { this.setState('recover'); this.slam(); }
+            break;
+          case 'recover':
+            if (this.stateT >= GOB.recover) { this.setState('chase'); this.cooldown = GOB.cooldown; }
+            break;
         }
-      } else if (this.onGround) {
-        // hurt: let the knockback slide to a stop
-        const f = 500 * dt;
-        this.vx = Math.abs(this.vx) <= f ? 0 : this.vx - Math.sign(this.vx) * f;
       }
-      const was = this.onGround;
+      // footwork: speed up / slow down toward what it wants (the lunge slides out slowly)
+      if (this.onGround) this.vx = toward(this.vx, this.hurtT > 0 ? 0 : want, (this.hurtT > 0 ? 500 : this.state === 'swing' ? 240 : 700) * dt);
+      const x0 = this.x;
       this.vy = Math.min(this.vy + 900 * dt, 400);
       Physics.move(this.game.level, this, dt);
-      if (!was && this.onGround) this.squash = 0.15;
-      this.squash = Math.max(0, this.squash - dt);
+      if (this.onGround) this.stride += Math.abs(this.x - x0) / 2.8;   // one frame per 2.8px: planted feet don't slide
+      if (this.hitWall && this.state === 'wander') this.facing = -this.facing;   // bumped into something: turn round
     }
+
+    /** Spotted you: a startled hop, a cackle and a "!". */
+    notice(dx) {
+      this.setState('alert');
+      this.facing = Math.sign(dx) || this.facing;
+      this.lostT = 0;
+      if (this.onGround) this.vy = -150;
+      sfx('goblinAlert', { minGap: 0.2 });
+      this.game.floatText(this.cx, this.y - 6, '!', '#ffd34d');
+    }
+
+    /** Is there space to lunge forward without bumping into you? */
+    roomAhead() { return (this.game.player.cx - this.cx) * this.facing >= GOB.close - 1; }
+
+    /** The club's arc in front of it. Hits once per swing (a block or a dash still saves you). */
+    swingAt() {
+      if (this.swingHit) return;
+      const pl = this.game.player;
+      const box = { x: this.facing > 0 ? this.cx : this.cx - GOB.clubReach, y: this.y + 2, w: GOB.clubReach, h: this.h - 4 };
+      if (Physics.rectsOverlap(box, { x: pl.x, y: pl.y, w: pl.w, h: pl.h })) {
+        this.swingHit = true;
+        pl.takeHit(this.damage, this.cx, this);
+      }
+    }
+
+    /** The club hits the dirt: a thud and a puff of dust where it lands. */
+    slam() {
+      const x = this.cx + this.facing * 11, y = this.y + this.h - 1;
+      for (let i = 0; i < 6; i++) {
+        this.game.fx.add({
+          x: x + U.lerp(-3, 3, Math.random()), y, vx: U.lerp(-40, 40, Math.random()) + this.facing * 15, vy: U.lerp(-60, -20, Math.random()), ay: 200,
+          life: U.lerp(0.25, 0.45, Math.random()), color: Math.random() < 0.5 ? '#c8b48a' : '#a08a64', size: Math.random() < 0.3 ? 2 : 1, fadeOut: 0.2,
+        });
+      }
+      sfx('goblinThud', { minGap: 0.05 });
+    }
+
     sprite() {
-      return goblinSprite(this.color);
+      const s = this.state;
+      let pose = 'idle', f = Math.floor(this.t * 1.6) % 2;
+      if (this.stunned()) f = 0;                                         // frozen / asleep: stock still
+      else if (this.hurtT > 0) { pose = 'hurt'; f = 0; }
+      else if (s === 'alert') { pose = 'alert'; f = 0; }
+      else if (!this.onGround) { pose = 'air'; f = this.vy < 0 ? 0 : 1; }
+      else if (s === 'windup') { pose = 'windup'; f = this.stateT < 0.12 ? 0 : 1 + (Math.floor(this.stateT * 16) % 2); }   // raise it, then tremble
+      else if (s === 'swing') { pose = 'swing'; f = 0; }
+      else if (s === 'recover') { pose = 'swing'; f = this.stateT < 0.16 ? 1 : 2; }       // club in the dirt, then hauled back up
+      else if (Math.abs(this.vx) > 6) { pose = 'walk'; f = Math.floor(this.stride) % 6; }
+      return ERX.GoblinSprite.frame(pose, f, this.facing, this.skin);
     }
   }
 
@@ -375,41 +483,6 @@
     b.set(cx - 1, ey, c32('#ff4a4a')); b.set(cx + 1, ey, c32('#ff4a4a'));
     b.outline(c32(INK));
     const cv = b.toCanvas();
-    cache.set(key, cv);
-    return cv;
-  }
-
-  // Goblin pixel art: 12 wide, 9 tall. '#' = solid, '.' = empty (the holes are the eyes).
-  const GOBLIN_ROWS = [
-    '#..........#',
-    '#..........#',
-    '##........##',
-    '##........##',
-    '.##########.',
-    '.##########.',
-    '.##.#..#.##.',
-    '.##.#..#.##.',
-    '.##########.',
-    '..########..',
-    '..########..',
-    '.##########.',
-    '.##########.',
-    '.##########.',
-    '############',
-    '############',
-    '############',
-    '###..##..###',
-    '###..##..###',
-    '###..##..###',
-  ];
-  function goblinSprite(color) {
-    const key = 'goblin' + color;
-    if (cache.has(key)) return cache.get(key);
-    const rows = GOBLIN_ROWS;
-    const g = new PB(rows[0].length + 2, rows.length + 2);
-    rows.forEach((r, y) => { for (let x = 0; x < r.length; x++) if (r[x] === '#') g.set(x + 1, y + 1, c32(color)); });
-    g.outline(c32(INK));
-    const cv = g.toCanvas();
     cache.set(key, cv);
     return cv;
   }
