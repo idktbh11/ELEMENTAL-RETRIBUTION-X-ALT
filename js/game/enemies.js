@@ -1,8 +1,9 @@
 /*
  * Basic monsters: SLIMES (hop at you), BATS (hang from the ceiling, then
- * swoop) and GOBLINS (walk over, wind up and swing a club). They share one
- * base class with health, knockback, a hit flash, contact damage and a death
- * burst that awards XP.
+ * swoop), GOBLINS (walk over, wind up and swing a club) and SPEWERS (rooted
+ * plants that lob seeds). They share one base class with health, knockback,
+ * a hit flash, contact damage and a death burst that awards XP. Anything a
+ * monster throws is a Projectile (see below).
  *
  * Status effects (burn, chill, blind...) from element attacks live on every
  * enemy: see applyStatus(). think(dt) should aim at this.target(), not the
@@ -567,9 +568,224 @@
     }
   }
 
-  const ENEMY_TYPES = { slime: Slime, bat: Bat, goblin: Goblin };
+  // ========================================================== PROJECTILES
+  /**
+   * Anything a monster spits or throws at you. It flies (with gravity, if it
+   * has any), bursts on walls and floors, and hits you once. Blocking while
+   * facing the way it came from, or dashing straight through it, saves you.
+   * Projectiles live in the game's bolt list (game.addProjectile), so the
+   * game screen updates and draws them and clears them with the level.
+   *
+   *   new Projectile(game, { x, y, vx, vy, gravity, r, damage, life, source, look, color })
+   *   look(ctx, x, y, projectile) draws it at screen (x, y); color tints the burst.
+   */
+  class Projectile {
+    constructor(game, o) {
+      this.game = game;
+      this.x = o.x; this.y = o.y;
+      this.vx = o.vx || 0; this.vy = o.vy || 0;
+      this.gravity = o.gravity || 0;
+      this.r = o.r || 3;                 // hit radius
+      this.damage = o.damage || 5;
+      this.life = o.life || 4;
+      this.source = o.source || null;    // who fired it (an upgraded block bites back at them)
+      this.look = o.look || null;
+      this.color = o.color || '#ffffff';
+      this.t = 0;
+      this.dead = false;
+    }
+
+    update(dt, game) {
+      if (this.dead) return;
+      this.t += dt;
+      this.vy = Math.min(this.vy + this.gravity * dt, 500);
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      if (this.t > this.life) { this.pop('time'); return; }
+      const TS = game.level.TS || 16;
+      if (game.level.isSolid(Math.floor(this.x / TS), Math.floor(this.y / TS))) {
+        this.x -= this.vx * dt; this.y -= this.vy * dt;   // burst on the surface, not inside it
+        this.pop('wall');
+        return;
+      }
+      const p = game.player;
+      if (p.intangible) return;          // dashing straight through it
+      const nx = U.clamp(this.x, p.x, p.x + p.w), ny = U.clamp(this.y, p.y, p.y + p.h);
+      if ((this.x - nx) * (this.x - nx) + (this.y - ny) * (this.y - ny) > this.r * this.r) return;
+      // "from" the way it came, so a block facing the shooter stops it
+      const res = p.takeHit(this.damage, this.x - Math.sign(this.vx || 1) * 24, this.source);
+      if (res === 'hit' || res === 'blocked') this.pop(res);
+    }
+
+    /** Burst into a little splash ('hit' | 'blocked' | 'wall' | 'time'). */
+    pop(why) {
+      this.dead = true;
+      const g = this.game, n = why === 'time' ? 3 : 7;
+      for (let i = 0; i < n; i++) {
+        g.fx.add({
+          x: this.x, y: this.y, vx: U.lerp(-70, 70, Math.random()) - this.vx * 0.15, vy: U.lerp(-110, -20, Math.random()), ay: 420,
+          life: U.lerp(0.2, 0.4, Math.random()), color: Math.random() < 0.6 ? this.color : C.shade(this.color, -0.35), size: Math.random() < 0.3 ? 2 : 1, fadeOut: 0.15,
+        });
+      }
+      if (why === 'blocked') g.sparks(this.x, this.y, 5, -Math.sign(this.vx || 1));
+      sfx('pelletPop', { minGap: 0.04 });
+    }
+
+    render(ctx, cam) {
+      if (this.look) this.look(ctx, Math.round(this.x) - cam.ix, Math.round(this.y) - cam.iy, this);
+    }
+  }
+
+  // ============================================================== SPEWER
+  // A rooted plant that lobs seeds at you (the art: js/render/spewer-sprite.js).
+  // Asleep until you come close; then it wakes, turns to track you, swells up
+  // and glows (your cue to move) and spits a seed that arcs down to where you
+  // were standing. Walk out from under it, block it, or dash through it.
+  // Hitting it while it charges makes it swallow the shot.
+  const SPEW = {
+    wake: [140, 90],                   // wakes when you're inside this box (px either side, up/down)
+    sleep: [230, 140], doze: 3,        // dozes off after you've been outside this box this long (s)
+    range: 170,                        // shoots when you're closer than this
+    wakeTime: 0.5, firstShot: 0.5, charge: 0.6, spit: 0.12, recoil: 0.3, cooldown: 1.3, flinch: 0.7,
+    gravity: 380,                      // the seeds' arc
+    flight: [0.4, 1.05], pace: 130,    // a seed's flight time: distance / pace, kept inside these bounds (s)
+  };
+
+  /** A seed in flight: a short fading trail, then the spinning seed. */
+  function seedLook(ctx, x, y, s) {
+    const SP = ERX.SpewerSprite;
+    ctx.fillStyle = SP.SEED;
+    for (let i = 1; i <= 2; i++) {
+      ctx.globalAlpha = 0.45 / i;
+      ctx.fillRect(Math.round(x - s.vx * 0.022 * i) - 1, Math.round(y - s.vy * 0.022 * i) - 1, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+    ctx.drawImage(SP.pellet(Math.floor(s.t * 12)), x - 3, y - 3);
+  }
+
+  class Spewer extends Enemy {
+    constructor(game, spawn) {
+      super(game, spawn);
+      this.w = 12;
+      this.h = 20;
+      this.x = spawn.x - this.w / 2;
+      const gy = game.level._groundBelow(Math.floor(spawn.x / 16), 2) * 16;
+      this.y = gy - this.h;
+      this.maxHp = this.hp = 16;
+      this.damage = 5;                   // its seeds, and its bite if you walk into it
+      this.xp = 14;
+      this.gold = 5;
+      this.knockback = 0;                // rooted: hits don't shove it...
+      this.immovable = true;             // ...and nothing pulls or launches it
+      this.color = '#9a3a8a';            // the death burst
+      this.anchorX = ERX.SpewerSprite.ANCHOR.x;
+      this.drawOffset = 1;
+      this.hurtSfx = 'spewerHurt';
+      this.dieSfx = 'spewerDie';
+      this.state = 'dormant';            // dormant | wake | idle | charge | spit | recoil
+      this.stateT = 0;
+      this.cooldown = 0;
+      this.awayT = 0;
+      this.facing = spawn.facing || (Math.random() < 0.5 ? -1 : 1);
+    }
+
+    setState(s) { this.state = s; this.stateT = 0; }
+
+    /** Where seeds leave its mouth (world px). */
+    mouth() {
+      const M = ERX.SpewerSprite.MOUTH;
+      return { x: this.cx + this.facing * M.dx, y: this.y + this.h - 1 + M.dy };
+    }
+
+    think(dt) {
+      const p = this.target();
+      const dx = p.cx - this.cx, dy = (p.y + p.feet) / 2 - (this.y + 6);
+      const near = (box) => Math.abs(dx) < box[0] && Math.abs(dy) < box[1];
+      this.stateT += dt;
+      this.cooldown = Math.max(0, this.cooldown - dt);
+
+      if (this.hurtT > 0) {
+        // a hit wakes it up, and one mid-charge makes it swallow the shot
+        if (this.state === 'dormant') this.wakeUp(dx);
+        else if (this.state === 'charge') { this.setState('idle'); this.cooldown = SPEW.flinch; }
+      }
+      switch (this.state) {
+        case 'dormant':
+          if (near(SPEW.wake)) this.wakeUp(dx);
+          break;
+        case 'wake':
+          if (this.stateT >= SPEW.wakeTime) { this.setState('idle'); this.cooldown = Math.max(this.cooldown, SPEW.firstShot); }
+          break;
+        case 'idle':
+          this.facing = Math.sign(dx) || this.facing;
+          this.awayT = near(SPEW.sleep) ? 0 : this.awayT + dt;
+          if (this.awayT > SPEW.doze) { this.setState('dormant'); this.awayT = 0; break; }
+          if (this.cooldown <= 0 && this.hurtT <= 0 && Math.abs(dx) < SPEW.range && Math.abs(dy) < SPEW.wake[1]) {
+            this.setState('charge');
+            sfx('spewerCharge', { minGap: 0.1 });
+          }
+          break;
+        case 'charge': {
+          this.facing = Math.sign(dx) || this.facing;   // the bulb keeps turning to follow you
+          if (Math.random() < dt * 14) {
+            // sparks of sap leaking from the lips
+            const m = this.mouth();
+            this.game.fx.add({ x: m.x + U.lerp(-1, 1, Math.random()), y: m.y + U.lerp(-1, 1, Math.random()), vx: U.lerp(-10, 10, Math.random()), vy: U.lerp(-30, -10, Math.random()), ay: 0, life: 0.3, color: Math.random() < 0.5 ? ERX.SpewerSprite.SEED : ERX.SpewerSprite.SEED_L, size: 1, fadeOut: 0.2 });
+          }
+          if (this.stateT >= SPEW.charge) { this.fire(p); this.setState('spit'); }
+          break;
+        }
+        case 'spit':
+          if (this.stateT >= SPEW.spit) this.setState('recoil');
+          break;
+        case 'recoil':
+          if (this.stateT >= SPEW.recoil) { this.setState('idle'); this.cooldown = SPEW.cooldown; }
+          break;
+      }
+      // rooted to the spot: only gravity moves it (so it still settles on the ground)
+      this.vx = 0;
+      this.vy = Math.min(this.vy + 900 * dt, 400);
+      Physics.move(this.game.level, this, dt);
+    }
+
+    wakeUp(dx) {
+      this.setState('wake');
+      this.facing = Math.sign(dx) || this.facing;
+      sfx('spewerWake', { minGap: 0.2 });
+    }
+
+    /** Spit a seed in an arc that comes down where you are right now (not where you're going). */
+    fire(p) {
+      const SP = ERX.SpewerSprite, m = this.mouth();
+      const tx = p.cx, ty = (p.y + p.feet) / 2;
+      const T = U.clamp(Math.abs(tx - m.x) / SPEW.pace, SPEW.flight[0], SPEW.flight[1]);
+      const vx = (tx - m.x) / T, vy = (ty - m.y) / T - 0.5 * SPEW.gravity * T;
+      this.game.addProjectile(new Projectile(this.game, {
+        x: m.x, y: m.y, vx, vy, gravity: SPEW.gravity, r: 3, damage: this.damage, life: 3, source: this, look: seedLook, color: SP.SEED,
+      }));
+      for (let i = 0; i < 4; i++) {
+        this.game.fx.add({ x: m.x, y: m.y, vx: this.facing * U.lerp(30, 90, Math.random()), vy: U.lerp(-40, 20, Math.random()), ay: 300, life: U.lerp(0.15, 0.3, Math.random()), color: i % 2 ? SP.SEED : '#e85a7a', size: 1, fadeOut: 0.1 });
+      }
+      sfx('spewerSpit');
+    }
+
+    sprite() {
+      const s = this.state;
+      let pose = 'idle', f = Math.floor(this.t * 3) % 4;
+      if (this.hurtT > 0) { pose = 'hurt'; f = 0; }
+      else if (s === 'dormant') { pose = 'dormant'; f = Math.floor(this.t * 1.2) % 2; }
+      else if (this.stunned()) f = 0;                                         // frozen / asleep: stock still
+      else if (s === 'wake') { pose = 'wake'; f = 0; }
+      else if (s === 'charge') { pose = 'charge'; f = Math.floor(this.stateT * 18) % 2; }   // swollen and shivering
+      else if (s === 'spit') { pose = 'spit'; f = 0; }
+      else if (s === 'recoil') { pose = 'spit'; f = 1; }
+      return ERX.SpewerSprite.frame(pose, f, this.facing);
+    }
+  }
+
+  const ENEMY_TYPES = { slime: Slime, bat: Bat, goblin: Goblin, spewer: Spewer };
   ERX.Enemies = {
-    Enemy, Slime, Bat, Goblin, TYPES: ENEMY_TYPES,
+    Enemy, Slime, Bat, Goblin, Spewer, Projectile, TYPES: ENEMY_TYPES,
     create(game, spawn) {
       const T = ENEMY_TYPES[spawn.type];
       if (!T) return null;

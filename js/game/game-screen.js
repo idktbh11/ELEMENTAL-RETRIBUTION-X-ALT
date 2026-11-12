@@ -301,6 +301,8 @@
     floatText(x, y, text, color) { this.floats.push({ x, y, text, color, t: 0 }); }
     clearBolts() { this.bolts.length = 0; }
     addBolt(x, y, vx) { this.bolts.push(new Bolt(x, y, vx)); }
+    /** Anything a monster throws at you (ERX.Enemies.Projectile): updated, drawn and cleared with the bolts. */
+    addProjectile(p) { this.bolts.push(p); return p; }
     setObjective(label, progress, goal) { this.objective = { label, progress, goal, t: 0, doneT: 0 }; }
     completeObjective() { if (this.objective) this.objective.doneT = 0.01; sfx('objective'); }
     bark(text) { this.barkMsg = { text, t: 0, dur: 2.6 }; }
@@ -658,12 +660,23 @@
       const b = this.blocker, p = this.player;
       if (!b) return;
       b.t += dt;
+      if (p.x + p.w > b.x - 12) { p.x = b.x - 12 - p.w; if (p.vx > 0) p.vx = 0; }   // nobody gets past. nobody.
       if (!b.landed) {
         b.vy += 900 * dt; b.y += b.vy * dt;
-        if (b.y >= this.level.floorY) { b.y = this.level.floorY; b.landed = true; b.t = 0; this.dust(b.x, b.y, 14); }
+        if (b.vx) b.x += b.vx * dt;                     // mid-hop, on its way somewhere
+        if (b.y >= this.level.floorY) { b.y = this.level.floorY; b.landed = true; b.t = 0; b.vx = 0; this.dust(b.x, b.y, b.goX != null ? 5 : 14); }
         return;
       }
-      if (p.x + p.w > b.x - 12) { p.x = b.x - 12 - p.w; if (p.vx > 0) p.vx = 0; }   // nobody gets past. nobody.
+      // told to go somewhere (b.goX): hop, hop, hop until it gets there
+      if (b.goX != null) {
+        const d = b.goX - b.x;
+        if (Math.abs(d) < 4) b.goX = null;
+        else if (b.t > 0.22) {
+          b.landed = false; b.vy = -170;
+          b.vx = Math.sign(d) * Math.min(110, Math.abs(d) / 0.38);   // 0.38s in the air: the last hop lands right on the spot
+          sfx('slimeHop', { minGap: 0.05 });
+        }
+      }
     }
     _renderBlocker(c, cam) {
       const b = this.blocker;

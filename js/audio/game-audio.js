@@ -179,6 +179,31 @@
       a.tone(d, { wave: 'pulse25', freq: 700, freqEnd: 150, slideTime: 0.42, t, dur: 0.42, vol: 0.055, release: 0.1, vibrato: 45, vibratoRate: 18 });
       a.noiseBurst(d, { t: t + 0.05, dur: 0.12, vol: 0.07, type: 'lowpass', freq: 900, release: 0.1 });
     },
+    // the spewer: a leafy rustle as it wakes, a gurgle as it charges, a wet PTOO, splats
+    spewerWake(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.12, vol: 0.05, type: 'bandpass', freq: 2400, Q: 1.2, release: 0.08 });
+      a.tone(d, { wave: 'sine', freq: 300, freqEnd: 620, slideTime: 0.14, t: t + 0.04, dur: 0.14, vol: 0.05, release: 0.05 });
+    },
+    spewerCharge(a, d, t) {
+      a.tone(d, { wave: 'triangle', freq: 180, freqEnd: 520, slideTime: 0.55, t, dur: 0.55, vol: 0.05, attack: 0.05, release: 0.05, vibrato: 25, vibratoRate: 18 });
+      a.noiseBurst(d, { t, dur: 0.5, vol: 0.03, type: 'lowpass', freq: 500, freqEnd: 1400, attack: 0.2, release: 0.1 });
+    },
+    spewerSpit(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.06, vol: 0.12, type: 'bandpass', freq: 900, Q: 1.5, release: 0.05 });
+      a.tone(d, { wave: 'square', freq: 520, freqEnd: 180, t, dur: 0.07, vol: 0.05, release: 0.04 });
+    },
+    pelletPop(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.05, vol: 0.07, type: 'lowpass', freq: 1200, release: 0.05 });
+      a.tone(d, { wave: 'sine', freq: 700, freqEnd: 300, t, dur: 0.04, vol: 0.04, release: 0.03 });
+    },
+    spewerHurt(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.06, vol: 0.06, type: 'bandpass', freq: 2500, Q: 1.4, release: 0.05 });
+      a.tone(d, { wave: 'pulse25', freq: 620, freqEnd: 400, t, dur: 0.08, vol: 0.045, release: 0.04 });
+    },
+    spewerDie(a, d, t) {
+      a.tone(d, { wave: 'pulse25', freq: 500, freqEnd: 90, slideTime: 0.5, t, dur: 0.5, vol: 0.05, release: 0.1, vibrato: 35, vibratoRate: 22 });
+      a.noiseBurst(d, { t, dur: 0.4, vol: 0.06, type: 'lowpass', freq: 1600, freqEnd: 300, release: 0.15 });
+    },
     levelUp(a, d, t) {
       [523, 659, 784, 1046].forEach((f, i) => a.tone(d, { wave: 'pulse25', freq: f, t: t + i * 0.07, dur: 0.08, vol: 0.08, release: 0.06 }));
       a.tone(d, { wave: 'pulse25', freq: 1318, t: t + 0.3, dur: 0.3, vol: 0.08, release: 0.3, vibrato: 14, vibratoDelay: 0.1 });

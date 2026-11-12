@@ -179,6 +179,8 @@
     g.blocker.angry = false;
     yield* say(g, SLIME, "You can look around, I guess. The view IS nice. Don't touch anything.");
     yield* say(g, SLIME, "When you're done, go find that Checkshot thing and use your fancy recall gadget. Shoo.");
+    yield* say(g, SLIME, "I'll be at my post. Way over THERE. Guarding. Don't follow me.");
+    g.blocker.goX = g.level.slimeX;       // off it hops to its post, out of the way of the monsters
     g.lockControls(false);
     g.setObjective('FIND THE CHECKSHOT  <-', null, 1);
   }
