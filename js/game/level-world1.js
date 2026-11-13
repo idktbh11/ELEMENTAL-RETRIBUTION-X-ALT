@@ -289,7 +289,7 @@
       this.floorY = this.surfRow * TS;
       this.landX = 38 * TS;                 // where you come down
       this.checkshotX = 18 * TS + 8;        // the first Checkshot
-      this.slimeX = 66 * TS;                // where the grumpy slime blocks the way (well past the goblin and the Spewer)
+      this.slimeX = 74 * TS;                // where the grumpy slime blocks the way (well past every monster, so none can hide behind it)
       this.spawn = { x: this.landX, y: this.floorY };
       this.checkpoints = [this.spawn];
       this.fallHeight = FALL;
@@ -305,6 +305,8 @@
         { type: 'slime', x: 30 * TS },
         { type: 'goblin', x: 45 * TS },
         { type: 'spewer', x: 50 * TS, facing: -1 },   // asleep when you land; wakes as you take on the goblin
+        { type: 'goblinThrower', x: 57 * TS },         // throws rocks, backs off if you crowd it
+        { type: 'goblinMage', x: 63 * TS },            // mana bolts from range, a mana bomb if you get close
       ];
       this.dark = 0;
       // critters + swaying grass (set up in buildLife)

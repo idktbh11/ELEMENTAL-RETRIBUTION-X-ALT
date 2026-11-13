@@ -204,6 +204,38 @@
       a.tone(d, { wave: 'pulse25', freq: 500, freqEnd: 90, slideTime: 0.5, t, dur: 0.5, vol: 0.05, release: 0.1, vibrato: 35, vibratoRate: 22 });
       a.noiseBurst(d, { t, dur: 0.4, vol: 0.06, type: 'lowpass', freq: 1600, freqEnd: 300, release: 0.15 });
     },
+    // the goblin thrower: a grunt and a whoosh, rocks clacking off things
+    goblinThrow(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.1, vol: 0.1, type: 'bandpass', freq: 1200, freqEnd: 3000, Q: 1.6, attack: 0.01, release: 0.06 });
+      a.tone(d, { wave: 'pulse25', freq: 420, freqEnd: 680, slideTime: 0.06, t, dur: 0.06, vol: 0.04, release: 0.03 });
+    },
+    rockClack(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.04, vol: 0.07, type: 'highpass', freq: 2500, release: 0.03 });
+      a.tone(d, { wave: 'square', freq: 900, freqEnd: 600, t, dur: 0.03, vol: 0.04, release: 0.02 });
+    },
+    // the goblin mage: a rising chant, a zap, fizzles, and the mana bomb's tick... tick... BOOM
+    mageCast(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 400, freqEnd: 1200, slideTime: 0.5, t, dur: 0.5, vol: 0.04, attack: 0.05, release: 0.05, vibrato: 30, vibratoRate: 12 });
+      a.tone(d, { wave: 'triangle', freq: 800, freqEnd: 2400, slideTime: 0.5, t, dur: 0.5, vol: 0.02, attack: 0.1, release: 0.05 });
+    },
+    mageBolt(a, d, t) {
+      a.tone(d, { wave: 'square', freq: 1400, freqEnd: 500, t, dur: 0.12, vol: 0.04, release: 0.05 });
+      a.noiseBurst(d, { t, dur: 0.08, vol: 0.05, type: 'bandpass', freq: 2000, Q: 1.2, release: 0.05 });
+    },
+    manaFizz(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.08, vol: 0.05, type: 'highpass', freq: 3000, release: 0.06 });
+      a.tone(d, { wave: 'sine', freq: 1200, freqEnd: 600, t, dur: 0.06, vol: 0.03, release: 0.04 });
+    },
+    manaDrop(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 180, freqEnd: 90, t, dur: 0.08, vol: 0.1, release: 0.05 });
+      a.tone(d, { wave: 'triangle', freq: 1320, t: t + 0.03, dur: 0.12, vol: 0.03, release: 0.1 });
+    },
+    manaTick(a, d, t) { a.tone(d, { wave: 'pulse25', freq: 1760, t, dur: 0.025, vol: 0.025, release: 0.02 }); },
+    manaBoom(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 140, freqEnd: 40, slideTime: 0.3, t, dur: 0.3, vol: 0.18, release: 0.1 });
+      a.noiseBurst(d, { t, dur: 0.35, vol: 0.14, type: 'lowpass', freq: 1800, freqEnd: 300, release: 0.2 });
+      a.tone(d, { wave: 'triangle', freq: 900, freqEnd: 200, slideTime: 0.25, t, dur: 0.25, vol: 0.05, release: 0.08 });
+    },
     levelUp(a, d, t) {
       [523, 659, 784, 1046].forEach((f, i) => a.tone(d, { wave: 'pulse25', freq: f, t: t + i * 0.07, dur: 0.08, vol: 0.08, release: 0.06 }));
       a.tone(d, { wave: 'pulse25', freq: 1318, t: t + 0.3, dur: 0.3, vol: 0.08, release: 0.3, vibrato: 14, vibratoDelay: 0.1 });
