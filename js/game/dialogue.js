@@ -79,7 +79,7 @@
             this.blipT -= after - before;
             if (this.blipT <= 0 && this.plain[after - 1] !== ' ') {
               this.blipT = 2;
-              sfx(this.effect === 'shake' ? 'voiceAngry' : this.speaker.voice, { pitch: this.speaker.pitch || 1, minGap: 0.03 });
+              sfx(this.effect === 'shake' ? this.speaker.shakeVoice || 'voiceAngry' : this.speaker.voice, { pitch: this.speaker.pitch || 1, minGap: 0.03 });
             }
           }
         } else {

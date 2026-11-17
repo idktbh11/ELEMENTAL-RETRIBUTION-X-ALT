@@ -7,7 +7,8 @@
  *
  * Head east and it gets foggy: past the meadow the fog thickens into the fog
  * zone (you can't see far, you walk slowly, and wisps drift out of the mist),
- * and the road ends at a cliff with an old cave in it. It's boarded up.
+ * and the road ends at a cliff with an old cave in it. It's boarded up, but
+ * the boards break (see openCave), and in you go: js/game/level-oldcave.js.
  *
  *   World1Level        the ground you walk on (tiles, trees, flowers, the cliff...)
  *   level.drawSky()    everything behind it: sky, sun / moon / stars,
@@ -397,6 +398,19 @@
       this.critters = [];
     }
 
+    /**
+     * The barricade's been smashed: open up the cave mouth so you can walk in
+     * (the game screen takes you into the old cave once you're inside it).
+     * quiet = it was already open (you broke in on an earlier visit).
+     */
+    openCave(g, quiet) {
+      this.caveOpen = true;
+      for (let tx = MAP.cave; tx < MAP.cave + 3; tx++) for (let ty = this.surfRow - 3; ty < this.surfRow; ty++) this.setTile(tx, ty, AIR);
+      if (quiet) return;
+      g.saveFlag('caveOpen');
+      g.thinkAloud('The sign DID say do not enter...');
+    }
+
     /** How foggy it is at x: 0 in the meadow, thickening through the fringe, 1 in the fog zone. */
     fogAt(x) {
       const k = U.clamp((x - this.fogStart) / (this.fogFull - this.fogStart), 0, 1);
@@ -483,19 +497,7 @@
           }
         }
       }
-      // ...boarded up: two planks nailed across in an X, one straight across
-      const plank = (x0, y0, x1, y1) => {
-        const len = Math.hypot(x1 - x0, y1 - y0), nx = -(y1 - y0) / len, ny = (x1 - x0) / len;
-        for (let i = 0; i <= len; i += 0.5) {
-          const x = x0 + ((x1 - x0) * i) / len, y = y0 + ((y1 - y0) * i) / len;
-          for (let o = -2; o <= 1; o++) b.set(Math.round(x + nx * o), Math.round(y + ny * o), c32(o === -2 ? PAL.wood[0] : o === 1 ? PAL.wood[2] : PAL.wood[1]));
-        }
-        for (let i = 6; i < len - 4; i += 11) b.set(Math.round(x0 + ((x1 - x0) * i) / len), Math.round(y0 + ((y1 - y0) * i) / len), c32(PAL.wood[2]));   // grain
-        for (const k of [2, len - 3]) b.set(Math.round(x0 + ((x1 - x0) * k) / len), Math.round(y0 + ((y1 - y0) * k) / len), c32('#c8ccd8'));      // nails
-      };
-      plank(mx0 - 3, gy - 46, mx0 + mw + 2, gy - 9);
-      plank(mx0 - 3, gy - 9, mx0 + mw + 2, gy - 46);
-      plank(mx0 - 5, gy - 27, mx0 + mw + 4, gy - 30);
+      // (the planks boarding it up are a live thing you can smash: ERX.Enemies.Barricade, see openCave)
       // a few rocks fallen at the foot of the cliff
       for (const [dx, rx, ry] of [[-7, 4, 3], [-15, 3, 2], [3, 5, 3]]) {
         b.ellipse(cave + dx, gy - ry + 1, rx, ry, rk[2]);

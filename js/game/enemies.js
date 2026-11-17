@@ -916,6 +916,103 @@
     }
   }
 
+  // ============================================================ BARRICADE
+  // The planks nailed across the old cave's mouth (world 1). Not a monster, but
+  // it sits in the enemy list so everything you can hit with can hit it. It
+  // falls apart as you hit it (the bar across cracks, then an arm of the X
+  // snaps off); break it and the way into the cave is open.
+  const PLANK = ['#c8986a', '#a8784a', '#7a5236'];
+  function barricadeBuf(stage) {
+    const b = new PB(62, 58);
+    // a board 4px wide, light on top; split = 1 splinters its end, -1 its start (where it broke)
+    const plank = (x0, y0, x1, y1, split) => {
+      const len = Math.hypot(x1 - x0, y1 - y0), nx = -(y1 - y0) / len, ny = (x1 - x0) / len;
+      for (let i = 0; i <= len; i += 0.5) {
+        const x = x0 + ((x1 - x0) * i) / len, y = y0 + ((y1 - y0) * i) / len;
+        const ragged = (split === 1 && i > len - 3) || (split === -1 && i < 3);
+        for (let o = -2; o <= 1; o++) {
+          if (ragged && (o + Math.floor(i)) % 2) continue;
+          b.set(Math.round(x + nx * o), Math.round(y + ny * o), c32(o === -2 ? PLANK[0] : o === 1 ? PLANK[2] : PLANK[1]));
+        }
+      }
+      const at = (k) => [Math.round(x0 + ((x1 - x0) * k) / len), Math.round(y0 + ((y1 - y0) * k) / len)];
+      for (let i = 6; i < len - 4; i += 11) { const [x, y] = at(i); b.set(x, y, c32(PLANK[2])); }   // grain
+      if (split !== -1) { const [x, y] = at(2); b.set(x, y, c32('#c8ccd8')); }                     // nails where it's still held
+      if (split !== 1) { const [x, y] = at(len - 3); b.set(x, y, c32('#c8ccd8')); }
+    };
+    plank(9, 12, 54, 49);                                                   // the X...
+    if (stage < 2) plank(9, 49, 54, 12); else plank(9, 49, 30, 32, 1);      // ...one arm snapped off
+    if (stage === 0) plank(7, 31, 57, 28);                                  // the bar across...
+    else { plank(7, 31, 31, 30, 1); if (stage === 1) plank(55, 41, 34, 31, 1); }   // ...cracked in two, one half hanging, then gone
+    b.outline(c32(INK));
+    return b;
+  }
+
+  class Barricade extends Enemy {
+    constructor(game, spawn) {
+      super(game, spawn);
+      this.w = 44; this.h = 48;
+      this.x = spawn.x;                    // the mouth's left edge
+      this.y = game.level.floorY - this.h;
+      this.maxHp = this.hp = 36;
+      this.damage = 0; this.xp = 0; this.gold = 0;
+      this.knockback = 0;
+      this.immovable = true;
+      this.color = PLANK[1];
+      this.hurtSfx = 'woodHit';
+      this.dieSfx = 'woodBreak';
+      this.wobble = 0;
+    }
+    think(dt) { this.vx = 0; this.vy = 0; this.wobble = Math.max(0, this.wobble - dt * 5); }
+    stunnedPhysics() {}                    // nailed in place: it doesn't fall, or get shoved
+    contact() {}                           // planks don't hurt you
+    hurt(dmg, dir, crit, kb) {
+      if (this.dead) return;
+      super.hurt(dmg, dir, crit, kb);
+      this.wobble = 1;
+      for (let i = 0; i < 5; i++) {
+        this.game.fx.add({
+          x: this.x + 6 + U.lerp(-4, 8, Math.random()), y: this.y + U.lerp(8, 40, Math.random()), vx: -dir * U.lerp(20, 90, Math.random()), vy: U.lerp(-90, -20, Math.random()), ay: 380,
+          life: U.lerp(0.3, 0.6, Math.random()), color: PLANK[Math.floor(Math.random() * 3)], size: Math.random() < 0.3 ? 2 : 1, fadeOut: 0.2,
+        });
+      }
+    }
+    /** Smashed: the planks burst and clatter down, and the cave is open. */
+    die() {
+      this.dead = true;
+      const g = this.game, gy = g.level.floorY;
+      sfx(this.dieSfx);
+      ERX.FX.shake(3, 0.3);
+      for (let i = 0; i < 34; i++) {
+        g.fx.add({
+          x: this.x + U.lerp(0, this.w, Math.random()), y: gy - U.lerp(6, 46, Math.random()), vx: U.lerp(-150, 50, Math.random()), vy: U.lerp(-170, -40, Math.random()), ay: 520,
+          life: U.lerp(0.5, 1, Math.random()), color: PLANK[i % 3], size: Math.random() < 0.45 ? 2 : 1, fadeOut: 0.3,
+        });
+      }
+      g.dust(this.cx, gy, 16);
+      if (g.level.openCave) g.level.openCave(g);
+    }
+    stage() { return this.hp > this.maxHp * 0.66 ? 0 : this.hp > this.maxHp * 0.33 ? 1 : 2; }
+    sprite() {
+      const s = this.stage(), key = 'barricade' + s;
+      if (!cache.has(key)) cache.set(key, barricadeBuf(s).toCanvas());
+      return cache.get(key);
+    }
+    render(ctx, cam) {
+      const cv = this.sprite();
+      const shake = this.wobble > 0 ? Math.round(Math.sin(this.t * 70) * this.wobble * 1.5) : 0;
+      const x = Math.round(this.x - 4) - cam.ix + shake, y = Math.round(this.game.level.floorY - 58) - cam.iy;
+      ctx.drawImage(cv, x, y);
+      if (this.flash > 0) { ctx.globalAlpha = this.flash; ctx.drawImage(whiteOf(cv), x, y); ctx.globalAlpha = 1; }
+      if (this.hp < this.maxHp) {
+        const bw = 24, bx = Math.round(this.cx - bw / 2) - cam.ix, by = y - 4;
+        ctx.fillStyle = INK; ctx.fillRect(bx - 1, by - 1, bw + 2, 4);
+        ctx.fillStyle = '#3a2418'; ctx.fillRect(bx, by, bw, 2);
+        ctx.fillStyle = '#c8986a'; ctx.fillRect(bx, by, Math.max(1, Math.round(bw * this.hp / this.maxHp)), 2);
+      }
+    }
+  }
+
   // ========================================================== PROJECTILES
   /**
    * Anything a monster spits or throws at you. It flies (with gravity, if it
@@ -1204,9 +1301,10 @@
     }
   }
 
-  const ENEMY_TYPES = { slime: Slime, bat: Bat, goblin: Goblin, goblinThrower: GoblinThrower, goblinMage: GoblinMage, spewer: Spewer, wisp: Wisp };
+  const ENEMY_TYPES = { slime: Slime, bat: Bat, goblin: Goblin, goblinThrower: GoblinThrower, goblinMage: GoblinMage, spewer: Spewer, wisp: Wisp, barricade: Barricade };
   ERX.Enemies = {
-    Enemy, Slime, Bat, Goblin, GoblinThrower, GoblinMage, Spewer, Wisp, Projectile, ManaBomb, TYPES: ENEMY_TYPES,
+    Enemy, Slime, Bat, Goblin, GoblinThrower, GoblinMage, Spewer, Wisp, Barricade, Projectile, ManaBomb, TYPES: ENEMY_TYPES,
+    batSprite,   // the cave-in (js/game/cave-fall.js) has bats in it too
     create(game, spawn) {
       const T = ENEMY_TYPES[spawn.type];
       if (!T) return null;

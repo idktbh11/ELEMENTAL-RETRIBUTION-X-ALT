@@ -13,7 +13,8 @@
  *   -> world 1 unlocked -> jump in (coming soon) or visit THE HQ (armour shop)
  *
  * Progress (character.progress.stage): new -> tutorialDone -> enemiesCleared
- *   -> deepEnds -> reachedEnd -> awakened -> worldUnlocked. Returning players
+ *   -> deepEnds -> reachedEnd -> awakened -> worldUnlocked -> deeperEnds (fell through
+ *   world 1's old cave into THE DEEPER ENDS). Returning players
  *   resume at the right place. character.element is assigned ONLY at the reveal.
  */
 (function (ERX) {
@@ -24,7 +25,7 @@
   const { Gate, Dummy, Bolt, Orb, Shockwave, renderDecor, drawFlame } = ERX.Props;
   const sfx = (n, o) => ERX.Audio.playSfx(n, o);
 
-  const STAGES = ['new', 'tutorialDone', 'enemiesCleared', 'deepEnds', 'reachedEnd', 'awakened', 'worldUnlocked'];
+  const STAGES = ['new', 'tutorialDone', 'enemiesCleared', 'deepEnds', 'reachedEnd', 'awakened', 'worldUnlocked', 'deeperEnds'];
   const ORB_LIGHTS = ['#ff5a5a', '#ffb84a', '#ffe95a', '#6aff8a', '#5ac8ff', '#b07aff'];
   // ability effects drawn behind characters (things on the ground)
   const BACK_FX = { zone: true, vortex: true, aura: true, spikes: true, pillar: true, turret: true };
@@ -68,6 +69,7 @@
       else if (stage === 'enemiesCleared') this.loadLevel('cave', { at: 'gauntlet' });
       else if (stage === 'awakened') this.loadLevel('void', { intro: true });
       else if (stage === 'worldUnlocked') this.loadLevel('void', {});
+      else if (stage === 'deeperEnds') this.loadLevel('deeper', {});
       else this.loadLevel('deep', { at: stage === 'reachedEnd' ? 'hall' : 'start' });
       ERX.Audio.setAmbience('cave');
     }
@@ -80,7 +82,7 @@
     loadLevel(id, opts = {}) {
       const seed = (Date.now() >>> 0) ^ (id === 'cave' ? 0x1234 : 0x5678);
       this.levelId = id;
-      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel, world1: ERX.World1Level }[id] || ERX.DeepEndsLevel;
+      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel, world1: ERX.World1Level, oldcave: ERX.OldCaveLevel, deeper: ERX.DeeperEndsLevel }[id] || ERX.DeepEndsLevel;
       this.level = new Level(seed);
       this.backWall = this.level.renderBackWall ? this.level.renderBackWall() : null;
       this.frontLayer = this.level.renderFront ? this.level.renderFront() : null;
@@ -258,6 +260,42 @@
           ERX.Audio.setAmbience('world1');
         }
         for (const s of L.enemySpawns) this.enemies.push(ERX.Enemies.create(this, s));
+        // the old cave at the end of the road: boarded up until you smash the boards (then it stays open)
+        if (this.character.progress && this.character.progress.caveOpen) L.openCave(this, true);
+        else this.enemies.push(ERX.Enemies.create(this, { type: 'barricade', x: L.caveX }));
+      } else if (id === 'oldcave') {
+        // THE OLD CAVE (js/game/level-oldcave.js): in from world 1, torches and bats, the bars at the end
+        const L = this.level;
+        this.stageName = 'oldcave';
+        this.darkness = 0.3;
+        this.hudAlpha = 1;
+        this.allowDeath = true;
+        p.placeAt(L.spawn.x, L.spawn.y);
+        for (const s of L.enemySpawns) this.enemies.push(ERX.Enemies.create(this, s));
+        ERX.Audio.playMusic('cave');
+        ERX.Audio.setAmbience('cave');
+        this.banner = { title: 'THE OLD CAVE', sub: 'Closed for a reason. Probably.', t: 0, dur: 3.5 };
+      } else if (id === 'deeper') {
+        // THE DEEPER ENDS (js/game/level-deeper.js): you fall in from the cave-in, or come back to it from a save
+        const L = this.level;
+        this.stageName = 'deeper';
+        this.darkness = 0.58;
+        this.hudAlpha = 1;
+        this.allowDeath = true;
+        for (const n of L.npcs) this.npcs.push(Object.assign({ talkIndex: 0, t: 0 }, n));
+        ERX.Audio.setAmbience('cave');
+        if (opts.fallIn) {
+          p.placeAt(L.landX, L.floorY - 280);
+          p.controls = false;
+          ERX.Audio.playMusic(null);
+          const slime = this.npcs.find((n) => n.id === 'slime');
+          if (slime) slime.hidden = true;                 // it turns up in a minute (the story drops it in)
+          this.runScript(ERX.Story.world.deeperArrival);
+        } else {
+          p.placeAt(L.spawn.x, L.spawn.y);
+          ERX.Audio.playMusic('deeperends');
+          this.banner = { title: 'THE DEEPER ENDS', sub: 'Darker. Deeper. Weirdly groovy.', t: 0, dur: 4 };
+        }
       } else {
         const L = this.level;
         const at = opts.at === 'hall' ? L.checkpoints[L.checkpoints.length - 1] : opts.at === 'elevator' ? { x: L.elevator.x0 - 24, y: L.elevator.floorY } : L.spawn;
@@ -374,9 +412,12 @@
 
     onEnemyKilled(e) {
       if (!e.xp) return;
+      const before = this.player.level;
       const ups = this.player.gainXp(e.xp);
+      // skill points are rare: one every Player.SKILL_EVERY levels, not one a level
+      const pts = ups ? ERX.Player.skillPointsBetween(before, this.player.level) : 0;
       this.floatText(e.cx, e.y - 14, '+' + e.xp + ' XP', '#a8f0ff');
-      if (ups) { this.character.skillPoints = (this.character.skillPoints || 0) + ups; ERX.Saves.update(this.character); }
+      if (pts) { this.character.skillPoints = (this.character.skillPoints || 0) + pts; ERX.Saves.update(this.character); }
       if (e.gold) {
         this.character.gold = (this.character.gold || 0) + e.gold;
         ERX.Saves.update(this.character);
@@ -386,7 +427,9 @@
       if (ups) {
         sfx('levelUp');
         this.floatText(this.player.cx, this.player.y - 18, 'LEVEL UP!', '#ffd34d');
-        ERX.Toast.show('LEVEL ' + this.player.level + '! +5 MAX HP, +1 SKILL POINT.', { color: '#ffd34d' });
+        const lv = this.player.level;
+        ERX.Toast.show('LEVEL ' + lv + '! +5 MAX HP' + (pts ? ', +' + pts + ' SKILL POINT' + (pts > 1 ? 'S' : '') + '!' : '. Next skill point at level ' + ERX.Player.nextSkillLevel(lv) + '.'), { color: '#ffd34d' });
+        if (pts) sfx('star');
         for (let i = 0; i < 20; i++) this.fx.add({ x: this.player.cx, y: this.player.y + 10, vx: U.lerp(-60, 60, Math.random()), vy: U.lerp(-140, -40, Math.random()), ay: 120, life: 1, color: i % 2 ? '#ffd34d' : '#ffffff', size: 1, fadeOut: 0.5 });
       }
     }
@@ -1002,6 +1045,7 @@
       const p = this.player;
       for (const n of this.npcs) {
         n.t += dt;
+        if (n.id === 'slime') { this._updateSlime(n, dt); continue; }
         const near = Math.abs(n.x - p.cx) < 40;
         if (n.pose === 'mine' && !n.talking && !near) {
           // swing the pickaxe at the wall
@@ -1016,6 +1060,35 @@
         if (near || n.talking) n.facingNow = p.cx < n.x ? -1 : 1;
         else n.facingNow = n.facing;
       }
+    }
+
+    /** The grumpy slime (Deeper Ends): drops in from above, hops wherever it's told (n.goX), and nobody gets past it. */
+    _updateSlime(n, dt) {
+      if (n.hidden) return;
+      const p = this.player, L = this.level;
+      if (n.falling || n.air) {
+        n.vy = (n.vy || 0) + 900 * dt;
+        n.y += n.vy * dt;
+        if (n.air) n.x += n.vx * dt;
+        if (n.y >= L.floorY) { n.y = L.floorY; n.vy = 0; n.vx = 0; n.landT = 0; this.dust(n.x, n.y, n.falling ? 14 : 5); n.falling = false; n.air = false; }
+        return;
+      }
+      n.landT = (n.landT || 0) + dt;
+      if (n.goX != null) {
+        const d = n.goX - n.x;
+        if (Math.abs(d) < 4) n.goX = null;
+        else if (Math.abs(n.x - p.cx) > 300) { n.x = n.goX; n.goX = null; }   // out of sight: it's simply there (no need to watch it hop the whole way)
+        else if (n.landT > 0.22) { n.air = true; n.vy = -170; n.vx = Math.sign(d) * Math.min(110, Math.abs(d) / 0.38); sfx('slimeHop', { minGap: 0.05 }); }
+      }
+      n.facingNow = Math.sign(p.cx - n.x) || -1;
+      if (n.guard && p.x + p.w > n.x - 12) { p.x = n.x - 12 - p.w; if (p.vx > 0) p.vx = 0; }   // nobody gets past. nobody. (not even while it hops)
+    }
+    /** The cave-in: the old cave's floor has gone and you're falling (js/game/cave-fall.js), down to the Deeper Ends. */
+    startCaveFall() {
+      this.enemies = [];
+      this.bolts = [];
+      this.fall = new ERX.CaveFall(this);
+      this.fall.onDone = (g) => ERX.Scenes.transition('fade', 0.8, () => g.loadLevel('deeper', { fallIn: true }), { silent: true });
     }
 
     _updateElevator(dt) {
@@ -1055,8 +1128,8 @@
         sfx('hurt');
         ERX.Toast.show('The Immortality Stone fished you out of the abyss. It wants a raise.', { color: '#a8f0ff' });
       }
-      // checkpoints (Deep Ends)
-      if (this.levelId === 'deep') {
+      // checkpoints (Deep Ends, the old cave, the Deeper Ends)
+      if (this.levelId === 'deep' || this.levelId === 'oldcave' || this.levelId === 'deeper') {
         for (const c of this.level.checkpoints) if (p.cx >= c.x && c.x > this.checkpoint.x - 1 && p.onGround) this.checkpoint = { x: c.x, y: c.y };
       }
 
@@ -1097,17 +1170,28 @@
         }
       }
       for (const n of this.npcs) {
-        if (Math.abs(n.x - p.cx) < 18 && Math.abs(n.y - p.feet) < 24) {
+        if (n.hidden || n.falling || n.air) continue;
+        if (Math.abs(n.x - p.cx) < (n.id === 'slime' ? 30 : 18) && Math.abs(n.y - p.feet) < 24) {
           this.prompt = { x: n.x, y: n.y - 34, text: '{use} TALK' };
-          if (K.wasPressed('use')) this.runScript((g) => ERX.Story.deep.talk(g, n));
+          if (K.wasPressed('use')) this.runScript((g) => (n.id === 'slime' ? ERX.Story.world.slimeTalk(g, n) : ERX.Story.deep.talk(g, n)));
           return;
         }
       }
       if (this.levelId === 'world1') {
+        const L = this.level;
+        if (L.caveOpen && p.cx > L.caveX + 20) { p.controls = false; this.travel('oldcave', {}); return; }   // into the old cave
         const cs = this.checkshot;
         if (cs && Math.abs(p.cx - cs.x) < 16 && p.onGround) {
           this.prompt = { x: cs.x, y: cs.y - 46, text: cs.on ? '{use} RECALL TO THE VOID (VRD)' : '{use} ACTIVATE THE CHECKSHOT' };
           if (K.wasPressed('use')) this.runScript(ERX.Story.world.checkshot);
+          return;
+        }
+      }
+      if (this.levelId === 'oldcave') {
+        const L = this.level;
+        if (!L.barsDone && Math.abs(p.cx - (L.barsX - 8)) < 22 && p.onGround) {
+          this.prompt = { x: L.barsX - 8, y: L.floorY - 40, text: '{use} LOOK THROUGH THE BARS' };
+          if (K.wasPressed('use')) { L.barsDone = true; this.runScript(ERX.Story.world.theBars); }
           return;
         }
       }
@@ -1304,6 +1388,18 @@
     }
 
     _drawNpc(c, cam, n) {
+      if (n.id === 'slime') {
+        // the grumpy slime, in its hard hat (still a construction site, apparently, even down here)
+        if (n.hidden || !ERX.Slime) return;
+        const frame = n.falling || n.air ? 2 : (n.landT || 0) < 0.3 ? 1 : Math.floor(n.t * 1.5) % 2;
+        const sl = ERX.Slime(n.angry ? '#e0504a' : '#8a90b0', frame), x = Math.round(n.x) - cam.ix, y = Math.round(n.y) - cam.iy;
+        c.drawImage(sl, x - Math.round(sl.width / 2), y - sl.height + 2);
+        const top = y - sl.height + 4;
+        c.fillStyle = '#120c1c'; c.fillRect(x - 6, top - 4, 12, 4);
+        c.fillStyle = '#ffd34d'; c.fillRect(x - 5, top - 4, 10, 3); c.fillRect(x - 7, top - 1, 14, 1);
+        c.fillStyle = '#fff0a0'; c.fillRect(x - 3, top - 4, 3, 1);
+        return;
+      }
       if (n.id === 'guide') {
         const FS = ERX.FigureSprite;
         FS.draw(c, FS.frame(n.talking ? 'smug' : 'neutral', 'idle', 0, n.facingNow || n.facing), Math.round(n.x) - cam.ix, Math.round(n.y) - cam.iy);

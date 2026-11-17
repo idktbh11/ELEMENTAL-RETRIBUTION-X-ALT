@@ -4,14 +4,20 @@
  *   The first time you try to jump into a world, the Voice yanks you back
  *   (a telekinesis device, obviously) to give you the VOID RECALL DEVICE.
  *   After that, every jump drops you into the world from the sky (see
- *   js/game/world-fall.js). World 1: you land, the grumpy slime drops in
- *   and blocks the way, and the first Checkshot lets you recall to the void.
+ *   js/game/world-fall.js). World 1: you land, and the first Checkshot lets
+ *   you recall to the void. Far to the east, past the fog, you can smash your
+ *   way into the old cave... where something behind bars tells you to LEAVE,
+ *   the floor gives way (js/game/cave-fall.js), and you land in THE DEEPER
+ *   ENDS, where guess who turns up again.
  */
 (function (ERX) {
   'use strict';
 
   const sfx = (n, o) => ERX.Audio.playSfx(n, o);
   const FIG = () => ERX.Story.void.FIG;
+  const SLIME = () => ERX.Story.deep.SLIME;
+  /** Whoever is behind the bars in the old cave: just two blue eyes and a very deep voice. */
+  const EYES = { name: '???', color: '#7ac8ff', plate: '#081428', voice: 'voiceDeep', shakeVoice: 'voiceDeep', textColor: '#9ad8ff', speed: 6 };
 
   function* say(g, speaker, text, o) {
     g.lockControls(true);
@@ -188,5 +194,105 @@
     g.startRecall();
   }
 
-  ERX.Story.world = { vrd, jump, world1Arrival, checkshot };
+  // ================================================== THE OLD CAVE: the bars at the end
+  function* theBars(g) {
+    const L = g.level, p = g.player;
+    g.lockControls(true);
+    p.vx = 0;
+    p.facing = 1;
+    g.music(null);                     // the music stops. that's never good.
+    yield 1.0;
+    // two blue eyes open in the dark behind the bars
+    L.eyes.on = true;
+    L.eyes.t = 0;
+    sfx('eyesOpen');
+    yield 1.6;
+    yield* say(g, EYES, 'LEAVE.', { effect: 'shake' });
+    g.dialogue.close();
+    L.eyes.on = false;                 // ...and they're gone
+    yield 0.7;
+    // the cave starts to shake
+    g.rumble(3);
+    g.shake(3, 2.6);
+    L.quake = 2.8;
+    yield 1.2;
+    // the floor cracks under you...
+    L.startCracks(p.cx);
+    sfx('floorCrack');
+    g.shake(5, 0.4);
+    yield 1.1;
+    sfx('floorCrack');
+    yield 0.4;
+    // ...and gives way
+    L.breakFloor(g, p.cx);
+    g.startCaveFall();
+  }
+
+  // ================================================== THE DEEPER ENDS: you land. guess who.
+  function* deeperArrival(g) {
+    const p = g.player, L = g.level;
+    g.lockControls(true);
+    // hang in the dark a moment while it fades in... then drop the last bit
+    const t0 = g.t;
+    yield () => { p.placeAt(L.landX, L.floorY - 280); p.vx = 0; p.vy = 0; return g.t - t0 > 0.7 ? true : undefined; };
+    p.vy = 120;
+    yield () => (p.onGround ? true : undefined);
+    // THUD
+    g.checkpoint = { x: p.cx, y: p.feet };   // (you came in from the air: this is where you'd get back up)
+    sfx('landSlam');
+    g.shake(7, 0.5);
+    if (g.impact) g.impact(0.07);
+    g.dust(p.cx, p.feet, 26);
+    p.lying = true;
+    yield 1.8;
+    p.lying = false;
+    sfx('getUp');
+    yield 0.5;
+    g.thinkAloud('...Ow.');
+    yield 1.2;
+    g.banner = { title: 'THE DEEPER ENDS', sub: 'Darker. Deeper. Weirdly groovy.', t: 0, dur: 4.5 };
+    g.music('deeperends');
+    g.saveProgress('deeperEnds');
+    yield 2.8;
+    // ...and who should drop in
+    const s = g.npcs.find((n) => n.id === 'slime');
+    if (s) {
+      s.hidden = false;
+      s.x = p.cx + 64; s.y = L.floorY - 240; s.vy = 0; s.falling = true; s.goX = null;
+      yield () => (s.falling ? undefined : true);
+      sfx('crash');
+      g.shake(4, 0.35);
+      yield 1.0;
+      yield* say(g, SLIME(), '...');
+      yield* say(g, SLIME(), 'You. AGAIN.');
+      yield* say(g, SLIME(), 'Did you just fall through the FLOOR? From WORLD 1?');
+      s.angry = true;
+      yield* say(g, SLIME(), 'Something told you to LEAVE, and you went DOWN instead. Unbelievable.', { effect: 'shake' });
+      s.angry = false;
+      yield* say(g, SLIME(), "This is the Deeper Ends. It's deeper. It's darker. And it is NOT finished.");
+      yield* say(g, SLIME(), "So I'm guarding it. Again. Look around if you must. Don't touch the crystals. They hum.");
+      g.dialogue.close();
+      s.goX = L.slimeX;                // off it hops, to stand guard at the end
+    }
+    g.lockControls(false);
+  }
+
+  // ================================================== the slime, if you insist on talking to it (Deeper Ends)
+  const SLIME_LINES = [
+    ['Still not finished. Still guarding. Still not happy about it.'],
+    ['The crystals hum. All night. I have not slept in WEEKS.'],
+    ['You fell. Through. The FLOOR. Who even does that.'],
+    ['Blue eyes? ...Never heard of them.', '...', 'Go away.'],
+    ["No, you can't go past. Hard hat zone. Do you have a hard hat? No. Exactly."],
+  ];
+  function* slimeTalk(g, n) {
+    n.talk = ((n.talk === undefined ? -1 : n.talk) + 1) % SLIME_LINES.length;
+    n.angry = true;
+    for (const line of SLIME_LINES[n.talk]) yield* say(g, SLIME(), line);
+    n.angry = false;
+    g.dialogue.close();
+    g.lockControls(false);
+  }
+
+  ERX.Story.world = { vrd, jump, world1Arrival, checkshot, theBars, deeperArrival, slimeTalk, EYES };
 })(window.ERX = window.ERX || {});

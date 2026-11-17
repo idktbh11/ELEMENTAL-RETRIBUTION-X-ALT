@@ -84,6 +84,11 @@
     /** XP needed to go from one level to the next. */
     static xpFor(level) { return 20 + (level - 1) * 25; }
 
+    /** Skill points earned going up from one level to another: one at every SKILL_EVERY-th level (6, 12, 18...). */
+    static skillPointsBetween(from, to) { const n = Player.SKILL_EVERY; return Math.floor(to / n) - Math.floor(from / n); }
+    /** The next level that brings a skill point. */
+    static nextSkillLevel(level) { const n = Player.SKILL_EVERY; return (Math.floor(level / n) + 1) * n; }
+
     /** Award XP; returns how many levels were gained. */
     gainXp(n) {
       this.xp += n;
@@ -518,5 +523,6 @@
   }
 
   Player.TUNING = TUNING;
+  Player.SKILL_EVERY = 6;   // levelling up only brings a skill point every 6 levels (set it to 8 to make them rarer still)
   ERX.Player = Player;
 })(window.ERX = window.ERX || {});

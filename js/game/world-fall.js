@@ -559,5 +559,7 @@
   SkyFall.hitShare = (el) => (el && el.id === 'chaos' ? 0.085 : 0.06);
   SkyFall.T = T;
   SkyFall.fallPose = fallPose;
+  SkyFall.tumblePose = tumblePose;   // (the cave-in, js/game/cave-fall.js, falls the same way)
+  SkyFall.drawBody = drawBody;
   ERX.SkyFall = SkyFall;
 })(window.ERX = window.ERX || {});

@@ -85,7 +85,34 @@
     },
   });
 
+  // A glassy crystal lead for the Deeper Ends: a sine body, a bright ping on top, and an echo off the cave walls.
+  V.crystal = (a, d, f, t, dur, tr) => {
+    const v = tr.lead.vol;
+    a.tone(d, { wave: 'sine', freq: f, t, dur: Math.min(dur * 0.8, 0.5), vol: v, attack: 0.004, decay: 0.2, sustain: 0.5, release: 0.25, vibrato: f * 0.01, vibratoRate: 5.5, vibratoDelay: 0.15 });
+    a.tone(d, { wave: 'triangle', freq: f * 2.003, t, dur: 0.03, vol: v * 0.3, attack: 0.002, release: 0.35 });
+    a.tone(d, { wave: 'sine', freq: f, t: t + 0.24, dur: 0.05, vol: v * 0.28, attack: 0.01, release: 0.3 });
+  };
+
   Object.assign(ERX.MusicTracks, {
+    // THE DEEPER ENDS: dark and mysterious... but it's got a groove. D minor,
+    // a swung slap bass, a low drone, a glassy crystal lead that echoes off the
+    // walls, and the A7 / C# that keep it uneasy.
+    deeperends: {
+      title: 'Something Glows Down Here',
+      bpm: 108, stepsPerBar: 16, swing: 0.14, restEvery: 4,
+      chords: 'Dm7 Dm7 Bbmaj7 A7 Dm7 Gm7 Bbmaj7 A7',
+      lead: {
+        inst: 'crystal', vol: 0.045, res: 8,
+        notes:
+          'D5 . F5 . A5 - G5 . | F5 . E5 . D5 - . . | F5 . A5 . C6 - Bb5 . | A5 - - . C#5 - E5 . | ' +
+          'D5 . F5 . A5 . D6 . | C6 . Bb5 . G5 - . . | F5 . G5 . A5 . Bb5 . | A5 - G5 - E5 - C#5 .',
+      },
+      bass: { octave: 2, vol: 0.2, pattern: 'R . 8 . R R . 7 . R . 8 R . 5 7' },
+      arp: { octave: 3, vol: 0.018, wave: 'triangle', pattern: [0, null, 2, null, 1, null, 3, null, 0, null, 2, null, 3, null, 1, null] },
+      pad: { octave: 2, vol: 0.014, inst: 'drone' },
+      stab: { octave: 4, vol: 0.012, pattern: '. . . . x . . . . . . x . . x .' },
+      drums: { vol: 0.75, pattern: 'k . h k s . h . k h . k s . h o' },
+    },
     // THE DEEP ENDS: bright, sparkly, a little bouncy. Monsters? What monsters?
     deepends: {
       title: 'Bright Down Here',
@@ -249,6 +276,34 @@
     wispDie(a, d, t) {
       a.tone(d, { wave: 'sine', freq: 800, freqEnd: 200, slideTime: 0.6, t, dur: 0.6, vol: 0.045, release: 0.15, vibrato: 25, vibratoRate: 8 });
       a.noiseBurst(d, { t, dur: 0.3, vol: 0.03, type: 'highpass', freq: 3000, release: 0.2 });
+    },
+    // the old cave: wood you can smash, eyes in the dark, a floor that gives way, rocks coming down
+    woodHit(a, d, t) {
+      a.tone(d, { wave: 'triangle', freq: 240, freqEnd: 150, t, dur: 0.07, vol: 0.12, release: 0.05 });
+      a.noiseBurst(d, { t, dur: 0.05, vol: 0.08, type: 'bandpass', freq: 900, Q: 1.4, release: 0.04 });
+    },
+    woodBreak(a, d, t) {
+      for (let i = 0; i < 4; i++) a.noiseBurst(d, { t: t + i * 0.05, dur: 0.07, vol: 0.12, type: 'bandpass', freq: 700 + i * 260, Q: 1.2, release: 0.06 });
+      a.tone(d, { wave: 'triangle', freq: 200, freqEnd: 70, slideTime: 0.25, t, dur: 0.25, vol: 0.12, release: 0.1 });
+      a.noiseBurst(d, { t: t + 0.18, dur: 0.3, vol: 0.06, type: 'lowpass', freq: 1200, release: 0.2 });
+    },
+    eyesOpen(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 62, freqEnd: 74, slideTime: 1.4, t, dur: 1.4, vol: 0.12, attack: 0.5, release: 0.6, vibrato: 2, vibratoRate: 3 });
+      a.tone(d, { wave: 'triangle', freq: 1240, freqEnd: 1180, t: t + 0.2, dur: 1.0, vol: 0.012, attack: 0.5, release: 0.5, vibrato: 8, vibratoRate: 5 });
+      a.noiseBurst(d, { t, dur: 1.2, vol: 0.025, type: 'lowpass', freq: 300, attack: 0.5, release: 0.5 });
+    },
+    voiceDeep(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: rand(78, 92), t, dur: 0.12, vol: 0.06, attack: 0.01, release: 0.08, vibrato: 4, vibratoRate: 18 });
+      a.tone(d, { wave: 'sine', freq: rand(40, 46), t, dur: 0.14, vol: 0.09, attack: 0.01, release: 0.1 });
+    },
+    floorCrack(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.12, vol: 0.12, type: 'highpass', freq: 2200, release: 0.06 });
+      a.tone(d, { wave: 'square', freq: 320, freqEnd: 70, t, dur: 0.12, vol: 0.05, release: 0.06 });
+      a.tone(d, { wave: 'sine', freq: 90, freqEnd: 40, t: t + 0.05, dur: 0.25, vol: 0.14, release: 0.12 });
+    },
+    rockWarn(a, d, t) { a.tone(d, { wave: 'square', freq: 220, freqEnd: 180, t, dur: 0.05, vol: 0.035, release: 0.03 }); },
+    rockWhoosh(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.22, vol: 0.07, type: 'bandpass', freq: 500, freqEnd: 1500, Q: 1.1, attack: 0.04, release: 0.1 });
     },
     manaBoom(a, d, t) {
       a.tone(d, { wave: 'sine', freq: 140, freqEnd: 40, slideTime: 0.3, t, dur: 0.3, vol: 0.18, release: 0.1 });

@@ -14,7 +14,8 @@
   /** Pre-render stalactites, mushrooms, crystals, sign posts and sconces. */
   function renderDecor(level) {
     const buf = new PB(level.pw, level.ph);
-    const R = ['#8a7e9c', '#6a6080', '#4a4060', '#2e2840'].map(c32);
+    // stalactites, pebbles...: the level's own colours if it has them (pal.decor), else the cave's purple-grey
+    const R = ((level.pal && level.pal.decor) || ['#8a7e9c', '#6a6080', '#4a4060', '#2e2840']).map(c32);
     const ink = c32(INK);
     for (const d of level.decor) {
       const x = Math.round(d.x), y = Math.round(d.y);

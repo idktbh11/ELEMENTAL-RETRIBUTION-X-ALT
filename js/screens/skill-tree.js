@@ -6,7 +6,7 @@
  *                  an element BLOCK and DASH upgrade, and STATUS POTENCY.
  *   STATS          Vitality / Focus / Agility (the old branches, kept small).
  *
- * Skill points come from levelling up (+1 each level).
+ * Skill points are rare: levelling up brings one every ERX.Player.SKILL_EVERY levels (6, 12, 18...).
  * Element ranks live in character.elementSkills, stats in character.skills.
  */
 (function (ERX) {
@@ -74,10 +74,11 @@
     _buy(id) {
       const pts = this.c.skillPoints || 0;
       const deny = (msg) => { sfx('deny'); ERX.Toast.show(msg, { color: '#ff8a6a' }); };
+      const earnMore = () => 'You get one every ' + ERX.Player.SKILL_EVERY + ' levels (next at level ' + ERX.Player.nextSkillLevel(this.c.level || 1) + ').';
       if (id.indexOf('stat:') === 0) {
         const br = STATS.find((b) => 'stat:' + b.id === id), lvl = this.c.skills[br.id] || 0;
         if (lvl >= 3) return deny(br.name + ' is maxed. Basically a rock now.');
-        if (pts < 1) return deny('No skill points. Level up to earn more (+1 each level).');
+        if (pts < 1) return deny('No skill points. ' + earnMore());
         this.c.skillPoints = pts - 1;
         this.c.skills[br.id] = lvl + 1;
         ERX.Saves.update(this.c);
@@ -91,7 +92,7 @@
       const n = NODES.find((x) => x.id === id);
       if (this._owned(n)) return deny(n.id === 'm1' ? 'You already know your basic attack. Obviously.' : 'Already learned. You are welcome.');
       if (!this._unlocked(n)) return deny(n.slot === 'ult' && n.rank === 1 ? 'Learn any 3 skills first.' : 'Learn the move below it first.');
-      if (pts < n.cost) return deny('Needs ' + n.cost + ' skill point' + (n.cost > 1 ? 's' : '') + '. Level up to earn more.');
+      if (pts < n.cost) return deny('Needs ' + n.cost + ' skill point' + (n.cost > 1 ? 's' : '') + '. ' + earnMore());
       this.c.skillPoints = pts - n.cost;
       this.c.elementSkills[n.slot] = n.id === 'potency' ? this._rank('potency') + 1 : n.rank;
       ERX.Saves.update(this.c);
