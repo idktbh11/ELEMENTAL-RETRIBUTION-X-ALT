@@ -11,7 +11,6 @@
   'use strict';
 
   const sfx = (n, o) => ERX.Audio.playSfx(n, o);
-  const { SLIME } = ERX.Story.deep;
   const FIG = () => ERX.Story.void.FIG;
 
   function* say(g, speaker, text, o) {
@@ -159,48 +158,15 @@
     g.enterWorld(1);                      // 2 s of black, then the portal (world-fall.js)
   }
 
-  // ================================================== WORLD 1: you're down. guess who.
+  // ================================================== WORLD 1: you're down
   function* world1Arrival(g) {
-    const p = g.player;
     g.lockControls(true);
     g.saveFlag('world1');
     yield 0.9;
-    g.dropBlocker(p.cx + 76);             // the slime falls out of the sky right in front of you
-    yield () => (g.blocker && g.blocker.landed ? true : undefined);
-    sfx('crash');
-    g.shake(4, 0.35);
-    yield 1.0;
-    yield* say(g, SLIME, '...');
-    yield* say(g, SLIME, "Oh. It's YOU. Again.");
-    if (g.element() && g.element().id === 'chaos') yield* say(g, SLIME, '...And you brought the flickering. Wonderful.');
-    g.blocker.angry = true;
-    yield* say(g, SLIME, 'World 1? Not finished yet. Be patient >:(', { effect: 'shake' });
-    yield* say(g, SLIME, 'Nobody gets past me. Nobody. Not even you. ESPECIALLY not you.');
-    g.blocker.angry = false;
-    yield* say(g, SLIME, "You can look around, I guess. The view IS nice. Don't touch anything.");
-    yield* say(g, SLIME, "When you're done, go find that Checkshot thing and use your fancy recall gadget. Shoo.");
-    yield* say(g, SLIME, "I'll be at my post. Way over THERE. Guarding. Don't follow me.");
-    g.blocker.goX = g.level.slimeX;       // off it hops to its post, out of the way of the monsters
+    g.thinkAloud('World 1. Nice view.');
+    yield 1.2;
     g.lockControls(false);
     g.setObjective('FIND THE CHECKSHOT  <-', null, 1);
-  }
-
-  // ================================================== the slime, if you insist on talking to it
-  const SLIME_LINES = [
-    ['Still not finished. Still being patient. Be like me.'],
-    ['Go away.', '...', 'I said go AWAY.'],
-    ["You know what's past me? NOTHING. Yet. Construction. Very dangerous. Hard hats."],
-    ['I am not a door. Stop pressing that button at me.'],
-    ["The Voice says it's 'definitely almost ready'. The Voice says a lot of things."],
-    ['Nice landing, by the way. You left a crater. Who is fixing that? Me. I am.'],
-  ];
-  function* slimeTalk(g) {
-    const bl = g.blocker;
-    bl.talk = ((bl.talk === undefined ? -1 : bl.talk) + 1) % SLIME_LINES.length;
-    bl.angry = true;
-    for (const line of SLIME_LINES[bl.talk]) yield* say(g, SLIME, line);
-    bl.angry = false;
-    g.lockControls(false);
   }
 
   // ================================================== CHECKSHOTS
@@ -222,5 +188,5 @@
     g.startRecall();
   }
 
-  ERX.Story.world = { vrd, jump, world1Arrival, slimeTalk, checkshot, SLIME_LINES };
+  ERX.Story.world = { vrd, jump, world1Arrival, checkshot };
 })(window.ERX = window.ERX || {});

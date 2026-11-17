@@ -231,6 +231,25 @@
       a.tone(d, { wave: 'triangle', freq: 1320, t: t + 0.03, dur: 0.12, vol: 0.03, release: 0.1 });
     },
     manaTick(a, d, t) { a.tone(d, { wave: 'pulse25', freq: 1760, t, dur: 0.025, vol: 0.025, release: 0.02 }); },
+    // the wisp: a ghostly shimmer as it forms, a rising whine as it charges, a rushing swoop, a sigh as it fades
+    wispAppear(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 600, freqEnd: 900, slideTime: 0.5, t, dur: 0.5, vol: 0.03, attack: 0.15, release: 0.15, vibrato: 25, vibratoRate: 9 });
+      a.tone(d, { wave: 'triangle', freq: 1200, freqEnd: 1800, slideTime: 0.4, t: t + 0.1, dur: 0.4, vol: 0.015, attack: 0.1, release: 0.15 });
+    },
+    wispCharge(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 500, freqEnd: 1400, slideTime: 0.45, t, dur: 0.45, vol: 0.035, attack: 0.05, release: 0.05, vibrato: 40, vibratoRate: 20 });
+    },
+    wispDash(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.25, vol: 0.08, type: 'bandpass', freq: 1800, freqEnd: 600, Q: 1.2, attack: 0.02, release: 0.12 });
+      a.tone(d, { wave: 'triangle', freq: 900, freqEnd: 300, slideTime: 0.2, t, dur: 0.2, vol: 0.03, release: 0.08 });
+    },
+    wispHurt(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 900, freqEnd: 500, t, dur: 0.12, vol: 0.045, release: 0.05, vibrato: 60, vibratoRate: 30 });
+    },
+    wispDie(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 800, freqEnd: 200, slideTime: 0.6, t, dur: 0.6, vol: 0.045, release: 0.15, vibrato: 25, vibratoRate: 8 });
+      a.noiseBurst(d, { t, dur: 0.3, vol: 0.03, type: 'highpass', freq: 3000, release: 0.2 });
+    },
     manaBoom(a, d, t) {
       a.tone(d, { wave: 'sine', freq: 140, freqEnd: 40, slideTime: 0.3, t, dur: 0.3, vol: 0.18, release: 0.1 });
       a.noiseBurst(d, { t, dur: 0.35, vol: 0.14, type: 'lowpass', freq: 1800, freqEnd: 300, release: 0.2 });

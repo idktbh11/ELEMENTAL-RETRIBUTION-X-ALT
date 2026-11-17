@@ -1,8 +1,8 @@
 /*
  * Basic monsters: SLIMES (hop at you), BATS (hang from the ceiling, then
  * swoop), GOBLINS (club goblins wind up and swing; throwers hurl rocks; mages
- * fire mana bolts and drop mana bombs) and SPEWERS (rooted plants that lob
- * seeds). They share one base class with health, knockback,
+ * fire mana bolts and drop mana bombs), SPEWERS (rooted plants that lob
+ * seeds) and WISPS (souls of the fog that dart through you). They share one base class with health, knockback,
  * a hit flash, contact damage and a death burst that awards XP. Anything a
  * monster throws is a Projectile (see below).
  *
@@ -786,6 +786,136 @@
     }
   }
 
+  // ================================================================ WISP
+  // A lost soul of the fog (world 1's fog zone): a turquoise flame with a face
+  // (the art: js/render/wisp-sprite.js). It fades in out of the mist (harmless
+  // while it takes shape), bobs about beside you, then pulls in tight and flares
+  // (your cue) and darts straight through where you are. It belongs to the fog:
+  // it won't follow you out of it (the level sets wispMinX / wispMaxX).
+  const WISP = {
+    appear: 0.9,
+    hover: [42, 26],                   // where it likes to hang: this far to your side, this far above your middle
+    reach: 100,                        // only charges when it's this close to you
+    charge: 0.5, dashSpeed: 170, rest: 0.6, cooldown: [1.3, 2.2],
+    roof: 130,                         // never higher than this above the ground
+  };
+  class Wisp extends Enemy {
+    constructor(game, spawn) {
+      super(game, spawn);
+      const S = ERX.WispSprite;
+      this.w = 10; this.h = 10;
+      this.x = spawn.x - this.w / 2;
+      this.y = (spawn.y !== undefined ? spawn.y : game.level.floorY - 56) - this.h / 2;
+      this.maxHp = this.hp = 10;
+      this.damage = 5;
+      this.xp = 9;
+      this.gold = 2;
+      this.knockback = 0.8;
+      this.flying = true;
+      this.color = S.COLORS.TURQ;                        // the death burst
+      this.anchorX = S.CENTER.x;                         // its head sits on the middle of its body box
+      this.drawOffset = S.H - S.CENTER.y - this.h / 2;
+      this.hurtSfx = 'wispHurt';
+      this.dieSfx = 'wispDie';
+      this.state = 'appear';                             // appear | hover | charge | dash | rest
+      this.stateT = 0;
+      this.alpha = 0;
+      this.side = Math.random() < 0.5 ? -1 : 1;          // which side of you it likes to hover on
+      this.cooldown = U.lerp(0.6, 1.4, Math.random());
+      this.dashDir = [0, 0];
+      this.dashT = 0.4;
+      sfx('wispAppear', { minGap: 0.15 });
+      // motes of mist swirl in as it takes shape
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        game.fx.add({ x: this.cx + Math.cos(a) * 18, y: this.cy + Math.sin(a) * 18, vx: -Math.cos(a) * 24, vy: -Math.sin(a) * 24, ay: 0, life: 0.7, color: i % 2 ? S.COLORS.TURQ : S.COLORS.PALE, size: 1, fadeOut: 0.3 });
+      }
+    }
+
+    setState(s) { this.state = s; this.stateT = 0; }
+
+    think(dt) {
+      const p = this.target(), L = this.game.level;
+      const dx = p.cx - this.cx, dy = (p.y + p.feet) / 2 - this.cy;
+      this.stateT += dt;
+      this.cooldown = Math.max(0, this.cooldown - dt);
+      let tvx = 0, tvy = 0, rate = 3;
+      if (this.state === 'appear') {
+        this.alpha = Math.min(1, this.stateT / WISP.appear);
+        tvy = -6;                                          // drifting up as it forms
+        if (this.stateT >= WISP.appear) this.setState('hover');
+      } else if (this.hurtT > 0) {
+        tvx = this.vx; tvy = this.vy; rate = 2;            // knocked about: it drifts with the blow
+        if (this.state === 'charge') { this.setState('hover'); this.cooldown = Math.max(this.cooldown, 0.6); }   // a hit snuffs out the charge
+      } else if (this.state === 'hover') {
+        // bob about beside you, a little above your head, on whichever side it's on (only a dash takes it through you)
+        this.side = Math.sign(this.cx - p.cx) || this.side;
+        const hx = p.cx + this.side * WISP.hover[0], hy = (p.y + p.feet) / 2 - WISP.hover[1] + Math.sin(this.t * 2.1) * 7;
+        tvx = U.clamp((hx - this.cx) * 2.2, -70, 70) + Math.sin(this.t * 1.3) * 10;
+        tvy = U.clamp((hy - this.cy) * 2.2, -60, 60);
+        this.facing = Math.sign(dx) || this.facing;      // always watching you
+        if (this.cooldown <= 0 && Math.hypot(dx, dy) < WISP.reach) { this.setState('charge'); sfx('wispCharge', { minGap: 0.1 }); }
+      } else if (this.state === 'charge') {
+        rate = 8;                                          // stops dead and shivers
+        this.facing = Math.sign(dx) || this.facing;
+        if (this.stateT >= WISP.charge) {
+          const d = Math.hypot(dx, dy) || 1;
+          this.dashDir = [dx / d, dy / d];                 // locked in: it goes where you were...
+          this.dashT = U.clamp((d + 40) / WISP.dashSpeed + 0.07, 0.3, 0.8);   // ...and right on through
+          this.setState('dash');
+          sfx('wispDash');
+        }
+      } else if (this.state === 'dash') {
+        tvx = this.dashDir[0] * WISP.dashSpeed; tvy = this.dashDir[1] * WISP.dashSpeed; rate = 14;
+        this.facing = Math.sign(this.dashDir[0]) || this.facing;
+        if (Math.random() < dt * 30) this.game.fx.add({ x: this.cx, y: this.cy, vx: -this.vx * 0.1, vy: -this.vy * 0.1 - 8, ay: 0, life: 0.35, color: Math.random() < 0.5 ? ERX.WispSprite.COLORS.TURQ : ERX.WispSprite.COLORS.PALE, size: 1, fadeOut: 0.25 });
+        if (this.stateT >= this.dashT) this.setState('rest');
+      } else if (this.state === 'rest') {
+        rate = 2.5;                                        // coasting to a stop on the far side of you
+        if (this.stateT >= WISP.rest) { this.setState('hover'); this.cooldown = U.lerp(WISP.cooldown[0], WISP.cooldown[1], Math.random()); }
+      }
+      this.vx = U.approach(this.vx, tvx, rate, dt);
+      this.vy = U.approach(this.vy, tvy, rate, dt);
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      // it belongs to the fog: not past its edge, not into the ground or the cliff, not up into the sky
+      if (L.wispMinX !== undefined && this.x < L.wispMinX) { this.x = L.wispMinX; this.vx = Math.max(0, this.vx); }
+      if (L.wispMaxX !== undefined && this.x + this.w > L.wispMaxX) { this.x = L.wispMaxX - this.w; this.vx = Math.min(0, this.vx); }
+      const floor = L.floorY - 4, roof = L.floorY - WISP.roof;
+      if (this.y + this.h > floor) { this.y = floor - this.h; this.vy = Math.min(0, this.vy); }
+      if (this.y < roof) { this.y = roof; this.vy = Math.max(0, this.vy); }
+    }
+
+    /** Harmless while it's still taking shape. */
+    contact() { if (this.state !== 'appear') super.contact(); }
+
+    /** It glows (lights up the fog, and the dark at night). */
+    light() { return { x: this.cx, y: this.cy, r: this.state === 'charge' ? 40 : 28, color: ERX.WispSprite.COLORS.TURQ, intensity: this.alpha * (0.75 + 0.25 * Math.sin(this.t * 6)) }; }
+
+    render(ctx, cam) {
+      if (this._erased) return;
+      // a soft halo, then the soul itself, flickering
+      const x = this.cx - cam.ix, y = this.cy - cam.iy, r = this.state === 'charge' ? 22 : 16;
+      const halo = ctx.createRadialGradient(x, y, 1, x, y, r);
+      halo.addColorStop(0, 'rgba(90,232,216,' + (0.45 * this.alpha).toFixed(3) + ')');
+      halo.addColorStop(1, 'rgba(90,232,216,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      ctx.save();
+      ctx.globalAlpha = this.alpha * (0.82 + 0.18 * Math.sin(this.t * 7));
+      super.render(ctx, cam);
+      ctx.restore();
+    }
+
+    sprite() {
+      const S = ERX.WispSprite;
+      if (this.hurtT > 0) return S.frame('hurt', 0, this.facing);
+      if (this.state === 'charge') return S.frame('charge', Math.floor(this.stateT * 20) % 2, this.facing);   // shivering
+      if (this.state === 'dash') return S.frame('dash', 0, this.facing);
+      return S.frame('float', Math.floor(this.t * 8) % 4, this.facing);
+    }
+  }
+
   // ========================================================== PROJECTILES
   /**
    * Anything a monster spits or throws at you. It flies (with gravity, if it
@@ -1074,9 +1204,9 @@
     }
   }
 
-  const ENEMY_TYPES = { slime: Slime, bat: Bat, goblin: Goblin, goblinThrower: GoblinThrower, goblinMage: GoblinMage, spewer: Spewer };
+  const ENEMY_TYPES = { slime: Slime, bat: Bat, goblin: Goblin, goblinThrower: GoblinThrower, goblinMage: GoblinMage, spewer: Spewer, wisp: Wisp };
   ERX.Enemies = {
-    Enemy, Slime, Bat, Goblin, GoblinThrower, GoblinMage, Spewer, Projectile, ManaBomb, TYPES: ENEMY_TYPES,
+    Enemy, Slime, Bat, Goblin, GoblinThrower, GoblinMage, Spewer, Wisp, Projectile, ManaBomb, TYPES: ENEMY_TYPES,
     create(game, spawn) {
       const T = ENEMY_TYPES[spawn.type];
       if (!T) return null;

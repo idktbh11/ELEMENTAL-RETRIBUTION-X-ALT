@@ -276,6 +276,7 @@
         let max = TUNING.speed * this.speedMult * (this.ab && this.ab.awakened() ? 1.12 : 1);   // awakened: a little faster
         if (this.blocking) max *= 0.35;
         if (this.attacking && this.onGround) max *= 0.35;
+        if (this.game.level.speedAt) max *= this.game.level.speedAt(this.cx);   // the ground can slow you (world 1's fog zone)
         if (dir !== 0) {
           if (!this.attacking) this.facing = dir;
           const acc = this.onGround ? TUNING.accel : TUNING.airAccel;

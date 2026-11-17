@@ -123,7 +123,6 @@
       this.recall = null;
       this.gift = null;
       this.checkshot = null;
-      this.blocker = null;
       this.ripples = [];
       this.effects = [];
       this.cine = null;
@@ -255,7 +254,6 @@
         } else {
           p.placeAt(L.checkshotX + 20, L.floorY);
           this.checkshot.on = true;
-          this.blocker = { x: L.slimeX, y: L.floorY, vy: 0, landed: true, t: 1, angry: false };
           ERX.Audio.playMusic('world1');
           ERX.Audio.setAmbience('world1');
         }
@@ -652,44 +650,6 @@
       if (s > 0.05) it.draw(c, sx, sy, gf.t, s * big);
     }
 
-    /** The grumpy slime falls out of the sky at x and parks itself in your way. */
-    dropBlocker(x) {
-      this.blocker = { x, y: this.camera.y - 40, vy: 0, landed: false, t: 0, angry: false };
-    }
-    _updateBlocker(dt) {
-      const b = this.blocker, p = this.player;
-      if (!b) return;
-      b.t += dt;
-      if (p.x + p.w > b.x - 12) { p.x = b.x - 12 - p.w; if (p.vx > 0) p.vx = 0; }   // nobody gets past. nobody.
-      if (!b.landed) {
-        b.vy += 900 * dt; b.y += b.vy * dt;
-        if (b.vx) b.x += b.vx * dt;                     // mid-hop, on its way somewhere
-        if (b.y >= this.level.floorY) { b.y = this.level.floorY; b.landed = true; b.t = 0; b.vx = 0; this.dust(b.x, b.y, b.goX != null ? 5 : 14); }
-        return;
-      }
-      // told to go somewhere (b.goX): hop, hop, hop until it gets there
-      if (b.goX != null) {
-        const d = b.goX - b.x;
-        if (Math.abs(d) < 4) b.goX = null;
-        else if (b.t > 0.22) {
-          b.landed = false; b.vy = -170;
-          b.vx = Math.sign(d) * Math.min(110, Math.abs(d) / 0.38);   // 0.38s in the air: the last hop lands right on the spot
-          sfx('slimeHop', { minGap: 0.05 });
-        }
-      }
-    }
-    _renderBlocker(c, cam) {
-      const b = this.blocker;
-      if (!ERX.Slime) return;
-      const frame = !b.landed ? 2 : b.t < 0.3 ? 1 : Math.floor(b.t * 1.5) % 2;
-      const sl = ERX.Slime(b.angry ? '#e0504a' : '#8a90b0', frame), x = Math.round(b.x - cam.ix), y = Math.round(b.y - cam.iy);
-      c.drawImage(sl, x - Math.round(sl.width / 2), y - sl.height + 2);
-      // a hard hat. it's a construction site.
-      const top = y - sl.height + 4;
-      c.fillStyle = '#120c1c'; c.fillRect(x - 6, top - 4, 12, 4);
-      c.fillStyle = '#ffd34d'; c.fillRect(x - 5, top - 4, 10, 3); c.fillRect(x - 7, top - 1, 14, 1);
-      c.fillStyle = '#fff0a0'; c.fillRect(x - 3, top - 4, 3, 1);
-    }
 
     /** The Checkshot: a stone pedestal with a void crystal floating over it (glowing once it's on). */
     _renderCheckshot(c, cam) {
@@ -957,7 +917,6 @@
         if (this.recall) this._updateRecall(dt);
         if (this.checkshot && this.checkshot.onT > 0) this.checkshot.onT += dt;
         if (this.gift) this.gift.t += dt;
-        this._updateBlocker(dt);
         for (const fx of this.effects) fx.update(dt);
         this.effects = this.effects.filter((fx) => !fx.dead);
       }
@@ -1151,12 +1110,6 @@
           if (K.wasPressed('use')) this.runScript(ERX.Story.world.checkshot);
           return;
         }
-        const bl = this.blocker;
-        if (bl && bl.landed && Math.abs(p.cx - bl.x) < 34) {
-          this.prompt = { x: bl.x, y: bl.y - 34, text: '{use} TALK' };
-          if (K.wasPressed('use')) this.runScript(ERX.Story.world.slimeTalk);
-          return;
-        }
       }
       if (this.levelId === 'void' && this.worlds && this.worlds.unlocked[0]) {
         const L = this.level;
@@ -1275,7 +1228,6 @@
       if (this.levelId === 'void') this._renderVoidThings(c, cam);
       if (this.level.drawLive) this.level.drawLive(c, cam, this);
       if (this.checkshot) this._renderCheckshot(c, cam);
-      if (this.blocker) this._renderBlocker(c, cam);
       for (const fx of this.effects) if (BACK_FX[fx.kind]) fx.render(c, cam);
       if (this.dummy) this.dummy.render(c, cam);
       for (const e of this.enemies) e.render(c, cam);
@@ -1302,6 +1254,7 @@
       if (glow) Glow.end(c, glowCol || '#ffffff');
       for (const fx of this.effects) if (fx.layer === 'screen') { if (fx.kind === 'custom') fx.render(c, cam); else ERX.Abilities.renderScreen(c, fx, vw, vh); }
       if (this.frontLayer) c.drawImage(this.frontLayer, -cam.ix, -cam.iy);
+      if (this.level.drawFog) this.level.drawFog(c, cam, vw, vh, this);   // fog over the world (world 1's fog zone), under the numbers
       if (this.levelId === 'void') this._renderVoidFx(c, cam);
       for (const s of this.shockwaves) s.render(c, cam);
       this.fx.render(c, -cam.ix, -cam.iy);

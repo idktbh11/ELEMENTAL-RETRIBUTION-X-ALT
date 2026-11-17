@@ -5,11 +5,17 @@
  * hills, a windmill, snowy mountains, a sea of clouds above it all, and a sun
  * that sets and a moon that rises (one full day every 10 minutes).
  *
- *   World1Level        the ground you walk on (tiles, trees, flowers...)
+ * Head east and it gets foggy: past the meadow the fog thickens into the fog
+ * zone (you can't see far, you walk slowly, and wisps drift out of the mist),
+ * and the road ends at a cliff with an old cave in it. It's boarded up.
+ *
+ *   World1Level        the ground you walk on (tiles, trees, flowers, the cliff...)
  *   level.drawSky()    everything behind it: sky, sun / moon / stars,
  *                      mountains, hills, clouds. It also works from thousands
  *                      of pixels up, which is where you start: falling.
- *   level.update()     the clock, critters, swaying grass
+ *   level.update()     the clock, critters, swaying grass, the wisps
+ *   level.drawFog()    the fog over everything (the game screen calls it)
+ *   level.speedAt(x)   how fast you can walk there (the player asks)
  *
  * Coordinates: the meadow is flat at floorY; "altitude" is how far the
  * camera is above where it sits when you stand on the ground.
@@ -270,10 +276,75 @@
     for (let yy = -ri; yy <= ri; yy++) { const hw = Math.floor(Math.sqrt(Math.max(0, R * R - yy * yy))); if (hw <= 0 && Math.abs(yy) > R - 0.5) continue; ctx.fillRect(Math.round(x - hw), Math.round(y + yy), hw * 2 + 1, 1); }
   }
 
-  // ------------------------------------------------------------ the meadow
+  // ------------------------------------------------------------ the journey
+  // East from where you land: the meadow (its monsters spread out, so you meet
+  // them one at a time), then the fog creeps in and thickens into the fog zone
+  // (you can't see far, you wade through it slowly, and wisps drift out of it),
+  // and at the far end a cliff with an old cave in it, boarded up. DO NOT ENTER.
+  const MAP = {
+    W: 214,                            // tiles
+    fogStart: 116, fogFull: 134,       // the fog thickens between these tiles; past fogFull you're in the fog zone
+    cave: 204,                         // the cliff starts at this tile (the cave mouth is in its face)
+    wisps: [[136, 2], [150, 1], [164, 2], [178, 1], [190, 2]],   // [tile, how many]: wisps drift out of the fog as you get there
+    slow: 0.32,                        // how much the fog zone slows your walking (0.32 = you walk at 68%)
+  };
+  const FOG = { day: '#c4d4d8', dusk: '#d4b8b0', night: '#1c2638' };
+  const fogCol = (L) => mix(mix(FOG.day, FOG.dusk, L.dusk * (1 - L.night)), FOG.night, L.night);
+  const GRASS_FOG = ['#a8b89c', '#8aa08a', '#6a8a74', '#4e6e60', '#3a584e'];   // the grass, grey and damp in the fog
+  const TREE_FOG = { dark: '#4a6a5a', mid: '#5e7e6a', light: '#7a9682', hi: '#94aa98', trunk: '#5a524a', trunkDark: '#423c36', outline: null };
+  const PINE_FOG = { dark: '#3a5a4a', mid: '#4a6a58', light: '#5e7e6a', trunk: '#4a4038' };
+  const DEAD = { bark: '#5a5050', dark: '#3a3434', light: '#7a7068' };
+  const DEAD_FAR = { bark: '#848080', dark: '#6a6666', light: '#9a9692' };   // further back: paler in the mist
+
+  /** A soft strip of mist that tiles sideways (day / dusk / night versions). */
+  function fogBank(seed, w, h) {
+    const cv = ERX.makeCanvas(w, h), c = cv.getContext('2d'), rng = new U.RNG(seed);
+    for (let i = 0; i < 46; i++) {
+      const x = rng.range(0, w), y = rng.range(h * 0.3, h * 0.72), r = rng.range(10, 26);
+      for (const ox of [-w, 0, w]) {                 // drawn three times over so it tiles without a seam
+        const gr = c.createRadialGradient(x + ox, y, 0, x + ox, y, r);
+        gr.addColorStop(0, 'rgba(238,246,248,0.5)');
+        gr.addColorStop(1, 'rgba(238,246,248,0)');
+        c.fillStyle = gr;
+        c.fillRect(x + ox - r, y - r, r * 2, r * 2);
+      }
+    }
+    return tod3(cv);
+  }
+  /** One vertical strip of a fog bank, faded by a (so the bank thins out where the fog does). */
+  function drawTodStrip(ctx, L, layer, sx, sw, sh, dx, dy, a) {
+    ctx.globalAlpha = a;
+    ctx.drawImage(layer.day, sx, 0, sw, sh, dx, dy, sw, sh);
+    if (L.dusk > 0.02) { ctx.globalAlpha = a * L.dusk * (1 - L.night); ctx.drawImage(layer.dusk, sx, 0, sw, sh, dx, dy, sw, sh); }
+    if (L.night > 0.02) { ctx.globalAlpha = a * L.night; ctx.drawImage(layer.night, sx, 0, sw, sh, dx, dy, sw, sh); }
+    ctx.globalAlpha = 1;
+  }
+  /** A dead tree: a crooked trunk and bare, forking limbs (a PixelBuffer, roots at the bottom middle). */
+  function deadTree(rng, h, pal = DEAD) {
+    const w = Math.round(h * 1.1), b = new PB(w, h + 2), cx = Math.floor(w / 2);
+    const bark = c32(pal.bark), dark = c32(pal.dark), light = c32(pal.light);
+    const limb = (x0, y0, ang, len, depth) => {
+      const x1 = x0 + Math.cos(ang) * len, y1 = y0 + Math.sin(ang) * len;
+      b.line(x0, y0, x1, y1, depth === 0 ? dark : bark);
+      if (depth === 0) b.line(x0 + 1, y0, x1 + 1, y1, bark);   // the big limbs are 2px thick
+      if (depth < 2) for (const s of [-1, 1]) limb(x1, y1, ang + s * rng.range(0.3, 0.7), len * rng.range(0.45, 0.65), depth + 1);
+    };
+    let x = cx;
+    const lean = rng.range(-0.25, 0.25), crown = Math.round(h * 0.4);
+    for (let y = h + 1; y > crown; y--) {
+      const k = (h + 1 - y) / h, tw = Math.max(1, Math.round(3.4 - k * 2.4));
+      x += lean * 0.5 + (rng.next() < 0.15 ? rng.range(-0.6, 0.6) : 0);
+      for (let i = 0; i < tw; i++) b.set(Math.round(x) - Math.floor(tw / 2) + i, y, i === 0 ? dark : i === tw - 1 ? light : bark);
+      if (y < h * 0.8 && rng.next() < 0.1) limb(x, y, -Math.PI / 2 + (rng.next() < 0.5 ? -1 : 1) * rng.range(0.6, 1.1), rng.range(h * 0.16, h * 0.28), 1);
+    }
+    for (let i = 0; i < 3; i++) limb(x, crown, -Math.PI / 2 + (i - 1) * rng.range(0.4, 0.8), rng.range(h * 0.22, h * 0.34), 0);
+    b.set(cx - 2, h + 1, dark); b.set(cx + 2, h + 1, dark); b.set(cx - 3, h + 1, bark);   // roots
+    return b;
+  }
+
   class World1Level extends ERX.CaveLevel {
     configure() {
-      this.W = 84;
+      this.W = MAP.W;
       this.H = 30;
       this.pal = PAL;
       this.sections = [];
@@ -284,12 +355,18 @@
       this.tiles.fill(AIR);
       this.surfRow = 27;
       for (let x = 0; x < this.W; x++) for (let y = this.surfRow; y < this.H; y++) this.setTile(x, y, ROCK);
-      // the edges: a giant old tree on the left, and (past the slime) the end of what's built so far
-      for (let y = 0; y < this.H; y++) for (const x of [0, 1, 2, this.W - 2, this.W - 1]) this.setTile(x, y, ROCK);
+      // the edges: a giant old tree on the left, and the cliff (with the cave in it) at the far end
+      for (let y = 0; y < this.H; y++) for (const x of [0, 1, 2]) this.setTile(x, y, ROCK);
+      for (let y = 0; y < this.H; y++) for (let x = MAP.cave; x < this.W; x++) this.setTile(x, y, ROCK);
       this.floorY = this.surfRow * TS;
       this.landX = 38 * TS;                 // where you come down
       this.checkshotX = 18 * TS + 8;        // the first Checkshot
-      this.slimeX = 74 * TS;                // where the grumpy slime blocks the way (well past every monster, so none can hide behind it)
+      this.fogStart = MAP.fogStart * TS;    // the fog starts creeping in here...
+      this.fogFull = MAP.fogFull * TS;      // ...and from here on you're in the fog zone
+      this.caveX = MAP.cave * TS;           // the face of the cliff
+      this.wispMinX = (this.fogStart + this.fogFull) / 2;   // wisps won't drift out of the thick of the fog
+      this.wispMaxX = this.caveX - 4;
+      this.wispMarks = MAP.wisps.map(([tx, n]) => ({ x: tx * TS, n, done: false }));
       this.spawn = { x: this.landX, y: this.floorY };
       this.checkpoints = [this.spawn];
       this.fallHeight = FALL;
@@ -298,31 +375,52 @@
       this.lights = [];
       this.torches = [];
       this.braziers = [];
-      this.signs = [{ x: 52 * TS + 8, y: this.floorY, text: 'WORLD 1  ->\nUnder construction.\nAsk the slime. (Do not ask the slime.)', read: false }];
+      this.signs = [
+        { x: 52 * TS + 8, y: this.floorY, text: 'WORLD 1  ->\nFog ahead. Mind the goblins.\n(And whatever lives in the fog.)', read: false },
+        { x: this.caveX - 40, y: this.floorY, text: 'DO NOT ENTER.', read: false },
+      ];
       this.chalk = [];
       this.npcs = [];
+      // the meadow's monsters, spread out along the way so you meet them one at a time
+      // (the wisps aren't here: they drift out of the fog as you go through it, see update())
       this.enemySpawns = [
-        { type: 'slime', x: 30 * TS },
-        { type: 'goblin', x: 45 * TS },
-        { type: 'spewer', x: 50 * TS, facing: -1 },   // asleep when you land; wakes as you take on the goblin
-        { type: 'goblinThrower', x: 57 * TS },         // throws rocks, backs off if you crowd it
-        { type: 'goblinMage', x: 63 * TS },            // mana bolts from range, a mana bomb if you get close
+        { type: 'slime', x: 50 * TS },
+        { type: 'goblin', x: 64 * TS },
+        { type: 'spewer', x: 78 * TS, facing: -1 },
+        { type: 'goblinThrower', x: 92 * TS },
+        { type: 'goblinMage', x: 106 * TS },
       ];
       this.dark = 0;
+      this.saidFog = false;
       // critters + swaying grass (set up in buildLife)
       this.grass = null;
       this.critters = [];
     }
 
-    darknessAt() { return this.dark; }
+    /** How foggy it is at x: 0 in the meadow, thickening through the fringe, 1 in the fog zone. */
+    fogAt(x) {
+      const k = U.clamp((x - this.fogStart) / (this.fogFull - this.fogStart), 0, 1);
+      return k * k * (3 - 2 * k);
+    }
+    /** How fast you can walk at x (the player asks): you wade slowly through the fog. */
+    speedAt(x) { return 1 - MAP.slow * this.fogAt(x); }
+    /** The fog zone is gloomy, so the wisps glow in it. */
+    darknessAt(x) { return Math.min(0.55, this.dark + 0.16 * this.fogAt(x || 0)); }
     renderBackground() { return ERX.makeCanvas(16, 16); }
 
-    /** The meadow floor: thick grass over layered soil, stones and roots. */
+    /** The ground: thick grass over layered soil (greying in the fog), then the cliff with the boarded-up cave. */
     renderTiles() {
       const W = this.pw, H = this.ph, b = new PB(W, H), n = new U.Noise(0x9a55);
-      const g = GRASS.map(c32), s = SOIL.map(c32), st = ['#b8b0b4', '#8e8894', '#625c6a'].map(c32), root = c32('#5a3a22');
-      const top = this.floorY;
-      for (let x = 3 * TS; x < (this.W - 2) * TS; x++) {
+      const s = SOIL.map(c32), st = ['#b8b0b4', '#8e8894', '#625c6a'].map(c32), root = c32('#5a3a22');
+      const top = this.floorY, cave = this.caveX;
+      const grassAt = new Map();   // grass colours by how foggy it is (16 steps)
+      const greens = (x) => {
+        const q = Math.round(this.fogAt(x) * 16);
+        if (!grassAt.has(q)) grassAt.set(q, GRASS.map((g, i) => c32(mix(g, GRASS_FOG[i], (q / 16) * 0.85))));
+        return grassAt.get(q);
+      };
+      for (let x = 3 * TS; x < cave; x++) {
+        const g = greens(x);
         const lip = Math.round((n.n1(x * 0.21) - 0.5) * 2);           // the grass edge wobbles a little
         for (let y = top + lip; y < H; y++) {
           const d = y - top - lip;
@@ -346,20 +444,82 @@
         if (r > 0.42) b.set(x, top + lip - 1, g[r > 0.7 ? 0 : 1]);
         if (r > 0.66) b.set(x, top + lip - 2, g[0]);
       }
+
+      // ---- the cliff at the end of the road: lit at its face, darker further in, mossy on top ----
+      const rk = PAL.rock.map(c32), edge = c32(PAL.outline);
+      for (let x = cave; x < W; x++) {
+        const u = x - cave;
+        const ctop = Math.round(top - (118 + 54 * (1 - Math.exp(-u / 46))) + (n.n1(x * 0.07 + 3) - 0.5) * 16);
+        for (let y = Math.max(0, ctop); y < H; y++) {
+          const d = y - ctop, tex = n.n2(x * 0.09, y * 0.11);
+          let i = u < 2 ? 1 : u < 6 ? 2 : 3;
+          if (tex > 0.62) i -= 1; else if (tex < 0.32) i += 1;
+          if (Math.sin(y * 0.35 + n.n1(x * 0.05) * 3) > 0.86) i += 1;     // strata
+          let col = rk[U.clamp(i, 0, 5)];
+          if (d < 3) col = c32(d === 0 ? '#5a8a5a' : d === 1 ? '#4a7a4e' : '#3a5a40');   // a mossy lip along the top
+          b.data[y * W + x] = col;
+        }
+        if (ctop - 1 >= 0) b.data[(ctop - 1) * W + x] = edge;
+      }
+      for (let y = 0; y < top; y++) if (b.solid(cave, y)) b.set(cave - 1, y, edge);   // outline the face
+
+      // ---- the cave mouth: an arch in the cliff, framed in big stones, black inside ----
+      const mx0 = cave + 8, mw = 40, mh = 54, gy = top, mcx = mx0 + mw / 2, r = mw / 2, archY = gy - mh + r;
+      const inMouth = (x, y) => {
+        if (y >= gy || y < gy - mh) return false;
+        const dx = Math.abs(x + 0.5 - mcx);
+        if (y >= archY) return dx <= r;
+        const dy = archY - y;
+        return dx * dx + dy * dy <= r * r;
+      };
+      for (let y = gy - mh - 4; y < gy; y++) {
+        for (let x = mx0 - 4; x < mx0 + mw + 4; x++) {
+          if (inMouth(x, y)) {
+            const rim = !inMouth(x - 2, y) || !inMouth(x + 2, y) || !inMouth(x, y - 2);
+            b.data[y * W + x] = c32(rim ? '#2a2030' : ERX.bayer(x, y) < 0.15 ? '#1a1220' : '#0e0a14');
+          } else if (inMouth(x - 3, y) || inMouth(x + 3, y) || inMouth(x, y + 3) || inMouth(x, y - 3)) {
+            const sv = n.n2(x * 0.4, y * 0.4);
+            b.data[y * W + x] = c32(sv > 0.55 ? '#a8a0a8' : sv > 0.4 ? '#8e8894' : '#625c6a');
+          }
+        }
+      }
+      // ...boarded up: two planks nailed across in an X, one straight across
+      const plank = (x0, y0, x1, y1) => {
+        const len = Math.hypot(x1 - x0, y1 - y0), nx = -(y1 - y0) / len, ny = (x1 - x0) / len;
+        for (let i = 0; i <= len; i += 0.5) {
+          const x = x0 + ((x1 - x0) * i) / len, y = y0 + ((y1 - y0) * i) / len;
+          for (let o = -2; o <= 1; o++) b.set(Math.round(x + nx * o), Math.round(y + ny * o), c32(o === -2 ? PAL.wood[0] : o === 1 ? PAL.wood[2] : PAL.wood[1]));
+        }
+        for (let i = 6; i < len - 4; i += 11) b.set(Math.round(x0 + ((x1 - x0) * i) / len), Math.round(y0 + ((y1 - y0) * i) / len), c32(PAL.wood[2]));   // grain
+        for (const k of [2, len - 3]) b.set(Math.round(x0 + ((x1 - x0) * k) / len), Math.round(y0 + ((y1 - y0) * k) / len), c32('#c8ccd8'));      // nails
+      };
+      plank(mx0 - 3, gy - 46, mx0 + mw + 2, gy - 9);
+      plank(mx0 - 3, gy - 9, mx0 + mw + 2, gy - 46);
+      plank(mx0 - 5, gy - 27, mx0 + mw + 4, gy - 30);
+      // a few rocks fallen at the foot of the cliff
+      for (const [dx, rx, ry] of [[-7, 4, 3], [-15, 3, 2], [3, 5, 3]]) {
+        b.ellipse(cave + dx, gy - ry + 1, rx, ry, rk[2]);
+        b.ellipse(cave + dx - 1, gy - ry, rx - 1, ry - 1, rk[1]);
+      }
       return b.toCanvas();
     }
 
-    /** Behind the path (drawn over the sky): big old trees, bushes, rocks, flowers, a fence. */
+    /** Behind the path (drawn over the sky): big old trees, bushes, rocks, flowers... and dead trees in the fog. */
     renderBackWall() {
       const W = this.pw, H = this.ph, b = new PB(W, H), rng = new U.RNG(0x7ee5), gy = this.floorY + 1;
+      const meadowEnd = this.fogStart, cave = this.caveX;
       const blit = (src, x, yBottom) => { for (let yy = 0; yy < src.h; yy++) for (let xx = 0; xx < src.w; xx++) { const v = src.data[yy * src.w + xx]; if (v) b.set(Math.round(x - src.w / 2) + xx, Math.round(yBottom - src.h) + yy, v); } };
-      // a soft row of distant trees right behind the meadow
-      for (let x = 3 * TS; x < W - 2 * TS; x += rng.int(10, 18)) {
-        const tr = rng.next() < 0.5 ? P.roundTree(rng, rng.int(6, 10), TREE_BACK) : P.pineTree(rng, rng.int(14, 24), { dark: '#2e6a4a', mid: '#3e7e56', light: '#5a9a6a', trunk: '#5a4a3a' });
+      // a soft row of distant trees right behind the path: greyer as the fog comes in, then dead
+      for (let x = 3 * TS; x < cave - TS; x += this.fogAt(x) > 0.6 ? rng.int(22, 40) : rng.int(10, 18)) {
+        const k = this.fogAt(x);
+        if (k > 0.6) { blit(deadTree(rng, rng.int(16, 26), DEAD_FAR), x, gy - 3); continue; }
+        const tr = rng.next() < 0.5 ? P.roundTree(rng, rng.int(6, 10), k > 0.2 ? TREE_FOG : TREE_BACK) : P.pineTree(rng, rng.int(14, 24), k > 0.2 ? PINE_FOG : { dark: '#2e6a4a', mid: '#3e7e56', light: '#5a9a6a', trunk: '#5a4a3a' });
         blit(tr, x, gy - 3);
       }
-      // the big trees (not where you land, not on the Checkshot)
+      // the big trees of the meadow (not where you land, not on the Checkshot)
       const spots = [[6, 'oak'], [10, 'pine'], [13, 'blossom'], [24, 'oak'], [27, 'birch'], [30, 'pine'], [46, 'blossom'], [49, 'oak'], [53, 'birch'], [56, 'pine'], [63, 'oak'], [67, 'blossom'], [72, 'pine'], [76, 'oak']];
+      const more = new U.RNG(0xb16), kinds = ['oak', 'pine', 'birch', 'blossom'];
+      for (let tx = 81; tx < MAP.fogStart - 2; tx += more.int(4, 8)) spots.push([tx, kinds[more.int(0, 3)]]);
       const BLOSSOM = { dark: '#c8508a', mid: '#f07ab4', light: '#ffb4d8', hi: '#ffe4f2', trunk: '#7a4a3a', trunkDark: '#5a3428', outline: '#3a1a2a' };
       for (const [tx, kind] of spots) {
         const x = tx * TS + rng.int(-4, 4);
@@ -368,47 +528,56 @@
         blit(tr, x, gy + 1);
         if (kind === 'blossom') for (let i = 0; i < 10; i++) b.set(x + rng.int(-18, 18), gy - rng.int(0, 2), c32(rng.pick(['#ffb4d8', '#f07ab4', '#ffffff'])));   // petals on the grass
       }
-      // bushes, rocks, flowers
+      // big dead trees standing in the fog
+      for (let tx = MAP.fogStart + 1; tx < MAP.cave - 3; tx += more.int(6, 11)) blit(deadTree(more, more.int(46, 70)), tx * TS + more.int(-4, 4), gy + 1);
+      // bushes, rocks, flowers in the meadow
       const bush = (x, r) => { const cy = gy - r + 1; for (const [dx, dy, rr] of [[0, 0, r], [-r * 0.7, 2, r * 0.75], [r * 0.7, 2, r * 0.7]]) { b.circle(x + dx, cy + dy, rr, c32('#2c7a36')); b.circle(x + dx - 1, cy + dy - 1, rr - 1, c32('#46a043')); b.circle(x + dx - rr * 0.3, cy + dy - rr * 0.35, rr * 0.4, c32('#7cd055')); } if (rng.next() < 0.5) for (let i = 0; i < 4; i++) b.set(Math.round(x + rng.range(-r, r)), Math.round(cy + rng.range(-r * 0.5, r * 0.5)), c32(rng.pick(['#ff4a5a', '#ffd34d', '#ffffff']))); };
-      for (let i = 0; i < 18; i++) { const x = rng.int(4, this.W - 4) * TS + rng.int(0, 15); if (Math.abs(x - this.landX) < 40 || Math.abs(x - this.checkshotX) < 26) continue; bush(x, rng.int(4, 7)); }
-      const rock = (x, r) => { b.ellipse(x, gy - r * 0.55, r, r * 0.7, c32('#7e7884')); b.ellipse(x - 1, gy - r * 0.7, r * 0.8, r * 0.5, c32('#a8a0a8')); b.ellipse(x - r * 0.3, gy - r * 0.95, r * 0.45, r * 0.25, c32('#7ae05a')); };
-      for (let i = 0; i < 8; i++) { const x = rng.int(4, this.W - 4) * TS + 8; if (Math.abs(x - this.landX) < 30 || Math.abs(x - this.checkshotX) < 22) continue; rock(x, rng.int(3, 6)); }
-      for (let x = 3 * TS; x < W - 2 * TS; x += rng.int(2, 7)) { const col = c32(rng.pick(FLOWERS)), y = gy - rng.int(2, 5); b.set(x, y + 1, c32('#3e9a3c')); b.set(x, y + 2, c32('#3e9a3c')); b.set(x, y, col); if (rng.next() < 0.4) { b.set(x - 1, y, col); b.set(x + 1, y, col); b.set(x, y - 1, col); } }
+      const mTiles = MAP.fogStart - 4;
+      for (let i = 0; i < 26; i++) { const x = rng.int(4, mTiles) * TS + rng.int(0, 15); if (Math.abs(x - this.landX) < 40 || Math.abs(x - this.checkshotX) < 26) continue; bush(x, rng.int(4, 7)); }
+      const rock = (x, r, mossy) => { b.ellipse(x, gy - r * 0.55, r, r * 0.7, c32('#7e7884')); b.ellipse(x - 1, gy - r * 0.7, r * 0.8, r * 0.5, c32('#a8a0a8')); b.ellipse(x - r * 0.3, gy - r * 0.95, r * 0.45, r * 0.25, c32(mossy ? '#7ae05a' : '#8a9a88')); };
+      for (let i = 0; i < 11; i++) { const x = rng.int(4, mTiles) * TS + 8; if (Math.abs(x - this.landX) < 30 || Math.abs(x - this.checkshotX) < 22) continue; rock(x, rng.int(3, 6), true); }
+      for (let x = 3 * TS; x < meadowEnd; x += rng.int(2, 7)) { if (rng.next() < this.fogAt(x) * 1.6) continue; const col = c32(rng.pick(FLOWERS)), y = gy - rng.int(2, 5); b.set(x, y + 1, c32('#3e9a3c')); b.set(x, y + 2, c32('#3e9a3c')); b.set(x, y, col); if (rng.next() < 0.4) { b.set(x - 1, y, col); b.set(x + 1, y, col); b.set(x, y - 1, col); } }
+      // in the fog: grey rocks and dead, twiggy shrubs
+      for (let tx = MAP.fogStart; tx < MAP.cave - 2; tx += more.int(3, 6)) {
+        const x = tx * TS + more.int(0, 15);
+        if (more.next() < 0.45) rock(x, more.int(3, 6), false);
+        else for (let i = 0; i < 5; i++) b.line(x, gy - 1, x + more.int(-6, 6), gy - more.int(4, 10), c32(i % 2 ? DEAD.bark : DEAD.dark));
+      }
       // the giant old tree on the far left: you are not getting past this
       const tx = 2 * TS;
       for (let y = 0; y < gy; y++) { const w = 26 + Math.round(Math.max(0, (y - gy + 40) * 0.5)); for (let xx = -w; xx <= Math.round(w * 0.4); xx++) { const edge = xx < -w + 3 ? 2 : xx > w * 0.4 - 3 ? 0 : 1; b.set(tx + xx, y, c32(['#a07048', '#7a5236', '#5a3a28'][edge === 1 ? (ERX.bayer(tx + xx, y) < 0.15 ? 2 : 1) : edge])); } }
       for (let i = 0; i < 26; i++) { const cx = tx + rng.int(-40, 30), cy = rng.int(-10, gy - 120); b.circle(cx, cy, rng.int(18, 34), c32('#2c7a36')); b.circle(cx - 3, cy - 3, rng.int(12, 22), c32('#46a043')); }
-      // the fence past the slime: the edge of what's built so far
-      for (let x = 60 * TS; x < 66 * TS; x += 10) { b.rect(x, gy - 14, 3, 14, c32('#a8784a')); b.rect(x, gy - 14, 3, 1, c32('#c8986a')); }
-      b.rect(60 * TS, gy - 11, 6 * TS, 2, c32('#8a5a38')); b.rect(60 * TS, gy - 6, 6 * TS, 2, c32('#8a5a38'));
-      for (let x = 60 * TS + 4; x < 66 * TS; x += 22) { b.rect(x, gy - 22, 14, 7, c32('#ffd34d')); for (let k = 0; k < 14; k += 4) b.rect(x + k, gy - 22, 2, 7, c32('#2a2030')); }
       b.outline(c32('#1a1424'));
       return b.toCanvas();
     }
 
-    /** In front of you: grass tufts along the bottom edge and leaves from the giant tree. */
+    /** In front of you: grass tufts along the bottom edge (grey in the fog) and leaves from the giant tree. */
     renderFront() {
       const W = this.pw, H = this.ph, b = new PB(W, H), rng = new U.RNG(0xf00d), gy = this.floorY + 2;
-      for (let x = 3 * TS; x < W - 2 * TS; x += rng.int(8, 26)) {
-        const h = rng.int(3, 7);
-        for (let i = 0; i < h + 3; i++) { const bx = x + rng.int(-3, 3), bh = rng.int(2, h); for (let yy = 0; yy < bh; yy++) b.set(bx + Math.round((yy / bh) * rng.range(-1, 1)), gy - yy, c32(yy > bh - 2 ? GRASS[0] : GRASS[2])); }
+      for (let x = 3 * TS; x < this.caveX - 4; x += rng.int(8, 26)) {
+        const h = rng.int(3, 7), pal = this.fogAt(x) > 0.5 ? GRASS_FOG : GRASS;
+        for (let i = 0; i < h + 3; i++) { const bx = x + rng.int(-3, 3), bh = rng.int(2, h); for (let yy = 0; yy < bh; yy++) b.set(bx + Math.round((yy / bh) * rng.range(-1, 1)), gy - yy, c32(yy > bh - 2 ? pal[0] : pal[2])); }
       }
       for (let i = 0; i < 14; i++) { const cx = 2 * TS + rng.int(-10, 40), cy = rng.int(4, 120); b.circle(cx, cy, rng.int(6, 12), c32('#2c7a36')); b.circle(cx + 2, cy - 2, rng.int(3, 6), c32('#46a043')); }
       return b.toCanvas();
     }
 
     // ---------------------------------------------------------- live bits
-    /** Swaying grass + critters, set up once. */
+    /** Swaying grass + critters (and motes of mist in the fog), set up once. */
     buildLife() {
-      const rng = new U.RNG(0x11fe);
+      const rng = new U.RNG(0x11fe), meadow = [4 * TS, this.fogStart - 4 * TS];
       this.grass = new P.Grass();
-      for (let x = 3 * TS; x < (this.W - 2) * TS; x += rng.int(1, 3)) this.grass.add(x, this.floorY - 1, rng.int(2, 6), rng.pick(['#86d84e', '#5cb844', '#b4f06a', '#3e9a3c']), rng.range(0, 6));
-      for (let i = 0; i < 9; i++) this.critters.push({ kind: 'fly', x: rng.range(4 * TS, 70 * TS), y: this.floorY - rng.range(10, 60), ph: rng.range(0, 6), c: rng.pick(['#ffd34d', '#ff8ad8', '#8ad8ff', '#ffffff']), vx: rng.range(-12, 12) });
-      for (let i = 0; i < 26; i++) this.critters.push({ kind: 'glow', x: rng.range(4 * TS, 72 * TS), y: this.floorY - rng.range(6, 80), ph: rng.range(0, 6) });
-      for (let i = 0; i < 6; i++) this.critters.push({ kind: 'leaf', x: rng.range(4 * TS, 72 * TS), y: rng.range(this.floorY - 160, this.floorY - 20), ph: rng.range(0, 6), c: rng.pick(['#46a043', '#7cd055', '#c8a040']) });
+      for (let x = 3 * TS; x < this.caveX - 2; x += rng.int(1, 3)) {
+        const fog = rng.next() < this.fogAt(x);
+        this.grass.add(x, this.floorY - 1, rng.int(2, 6), rng.pick(fog ? [GRASS_FOG[1], GRASS_FOG[2], GRASS_FOG[0], GRASS_FOG[3]] : ['#86d84e', '#5cb844', '#b4f06a', '#3e9a3c']), rng.range(0, 6));
+      }
+      for (let i = 0; i < 14; i++) this.critters.push({ kind: 'fly', x: rng.range(meadow[0], meadow[1]), y: this.floorY - rng.range(10, 60), ph: rng.range(0, 6), c: rng.pick(['#ffd34d', '#ff8ad8', '#8ad8ff', '#ffffff']), vx: rng.range(-12, 12) });
+      for (let i = 0; i < 40; i++) this.critters.push({ kind: 'glow', x: rng.range(meadow[0], meadow[1]), y: this.floorY - rng.range(6, 80), ph: rng.range(0, 6) });
+      for (let i = 0; i < 9; i++) this.critters.push({ kind: 'leaf', x: rng.range(meadow[0], meadow[1]), y: rng.range(this.floorY - 160, this.floorY - 20), ph: rng.range(0, 6), c: rng.pick(['#46a043', '#7cd055', '#c8a040']) });
+      for (let i = 0; i < 44; i++) this.critters.push({ kind: 'mote', x: rng.range(this.fogStart, this.caveX), y: this.floorY - rng.range(4, 110), ph: rng.range(0, 6), sp: rng.range(4, 9) });
     }
 
-    /** The clock and the critters. g = the game screen. */
+    /** The clock, the critters, and the fog zone (it slows you, and wisps drift out of it). g = the game screen. */
     update(dt, g) {
       if (!this.grass) this.buildLife();
       g.worldTod = ((g.worldTod === undefined ? 0.12 : g.worldTod) + dt / DAY) % 1;
@@ -417,11 +586,27 @@
       this.dark = Math.min(0.5, L.night * 0.5 + L.dusk * 0.08);
       ERX.World1 = ERX.World1 || {};
       ERX.World1.night = L.night;
+      const m0 = 4 * TS, m1 = this.fogStart - 4 * TS;
       for (const c of this.critters) {
         c.ph += dt;
-        if (c.kind === 'fly') { c.x += (c.vx + Math.sin(c.ph * 0.7) * 14) * dt; c.y += Math.sin(c.ph * 2.3) * 12 * dt; if (c.x < 4 * TS || c.x > 72 * TS) c.vx = -c.vx; }
+        if (c.kind === 'fly') { c.x += (c.vx + Math.sin(c.ph * 0.7) * 14) * dt; c.y += Math.sin(c.ph * 2.3) * 12 * dt; if (c.x < m0 || c.x > m1) c.vx = -c.vx; }
         else if (c.kind === 'glow') { c.x += Math.sin(c.ph * 0.6) * 6 * dt; c.y += Math.cos(c.ph * 0.9) * 5 * dt; }
-        else if (c.kind === 'leaf') { c.y += 14 * dt; c.x += Math.sin(c.ph * 1.6) * 16 * dt; if (c.y > this.floorY - 2) { c.y = this.floorY - 170; c.x = 4 * TS + Math.random() * 68 * TS; } }
+        else if (c.kind === 'leaf') { c.y += 14 * dt; c.x += Math.sin(c.ph * 1.6) * 16 * dt; if (c.y > this.floorY - 2) { c.y = this.floorY - 170; c.x = m0 + Math.random() * (m1 - m0); } }
+        else if (c.kind === 'mote') { c.y -= c.sp * dt; c.x += Math.sin(c.ph * 0.8) * 4 * dt; if (c.y < this.floorY - 120) { c.y = this.floorY - 2; c.x = this.fogStart + Math.random() * (this.caveX - this.fogStart); } }
+      }
+      // the fog zone
+      const p = g.player;
+      if (!p) return;
+      if (!this.saidFog && this.fogAt(p.cx) > 0.4) { this.saidFog = true; g.thinkAloud('Getting hard to see out here...'); }
+      // wisps drift out of the fog ahead of you as you go deeper
+      for (const m of this.wispMarks) {
+        if (m.done || p.cx < m.x) continue;
+        m.done = true;
+        for (let i = 0; i < m.n; i++) {
+          const x = U.clamp(p.cx + U.lerp(90, 150, Math.random()) + i * 30, this.wispMinX + 8, this.wispMaxX - 8);
+          const e = ERX.Enemies.create(g, { type: 'wisp', x, y: this.floorY - U.lerp(36, 80, Math.random()) });
+          if (e) g.enemies.push(e);
+        }
       }
     }
 
@@ -437,25 +622,64 @@
         if (c.kind === 'fly' && L.night < 0.6) { const f = Math.floor(c.ph * 14) % 2; ctx.globalAlpha = 1 - L.night; ctx.fillStyle = c.c; ctx.fillRect(x - 1, y - f, 1, 1); ctx.fillRect(x + 1, y - f, 1, 1); ctx.fillStyle = '#2a1a10'; ctx.fillRect(x, y, 1, 1); ctx.globalAlpha = 1; }
         else if (c.kind === 'glow' && L.night > 0.15) { const a = L.night * (0.5 + 0.5 * Math.sin(c.ph * 2.2)); ctx.globalAlpha = a * 0.35; ctx.fillStyle = '#d8ff6a'; ctx.fillRect(x - 1, y - 1, 3, 3); ctx.globalAlpha = a; ctx.fillStyle = '#f4ffb0'; ctx.fillRect(x, y, 1, 1); ctx.globalAlpha = 1; }
         else if (c.kind === 'leaf') { ctx.fillStyle = c.c; ctx.fillRect(x, y, 2, 1); ctx.fillRect(x + (Math.sin(c.ph * 3) > 0 ? 1 : 0), y + 1, 1, 1); }
+        else if (c.kind === 'mote') { ctx.globalAlpha = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(c.ph * 1.7)); ctx.fillStyle = '#b8fff4'; ctx.fillRect(x, y, 1, 1); ctx.globalAlpha = 1; }
       }
     }
 
-    /** Fireflies light up the night. */
-    liveLights() {
+    /** Fireflies light up the night; anything that glows (wisps) lights up the fog. */
+    liveLights(g) {
       const out = [], L = this.L;
-      if (!L || L.night < 0.2) return out;
-      for (const c of this.critters) if (c.kind === 'glow') out.push({ x: c.x, y: c.y, r: 14, color: '#d8ff6a', intensity: L.night * (0.5 + 0.5 * Math.sin(c.ph * 2.2)) });
+      if (L && L.night >= 0.2) for (const c of this.critters) if (c.kind === 'glow') out.push({ x: c.x, y: c.y, r: 14, color: '#d8ff6a', intensity: L.night * (0.5 + 0.5 * Math.sin(c.ph * 2.2)) });
+      if (g && g.enemies) for (const e of g.enemies) if (e.light && !e.dead) out.push(e.light());
       return out;
     }
 
-    /** The sky and everything far away (see Backdrop). g = the game screen. */
+    /** The sky and everything far away (see Backdrop), washed out by the fog. g = the game screen. */
     drawSky(ctx, cam, vw, vh, g) {
       this.game = g;
       if (!this.backdrop || this.backdrop.vw !== vw || this.backdrop.vh !== vh) this.backdrop = new Backdrop(this, vw, vh);
       this.backdrop.draw(ctx, cam, vw, vh, g, this);
+      const f = this.fogAt(cam.x + vw / 2);
+      if (f > 0.01) { ctx.fillStyle = C.rgba(fogCol(this.L || lightAt(0.12)), +(0.72 * f).toFixed(3)); ctx.fillRect(0, 0, vw, vh); }
+    }
+
+    /**
+     * The fog, over the world (the game screen calls this once everything's drawn,
+     * before the damage numbers): banks of mist rolling along, and you can't see
+     * far: it's clear right round you and thick further off.
+     */
+    drawFog(ctx, cam, vw, vh, g) {
+      if (this.fogAt(cam.ix + vw) < 0.01) return;
+      const L = this.L || lightAt(0.12), t = g.t;
+      if (!this.fogBanks) this.fogBanks = [fogBank(0x5eed, 384, 64), fogBank(0xf06, 384, 48)];
+      const banks = [
+        { cv: this.fogBanks[0], y: this.floorY - 46, par: 1, drift: t * 7, a: 0.85 },     // low, along the ground
+        { cv: this.fogBanks[1], y: this.floorY - 120, par: 0.85, drift: -t * 4, a: 0.6 },  // higher, drifting the other way
+      ];
+      for (const bk of banks) {
+        const w = bk.cv.day.width, h = bk.cv.day.height, sy = Math.round(bk.y - cam.iy);
+        if (sy > vh || sy + h < 0) continue;
+        for (let sx = 0; sx < vw; sx += 8) {
+          const a = this.fogAt(cam.ix + sx + 4) * bk.a;
+          if (a < 0.01) continue;
+          const src = Math.floor((((cam.ix * bk.par + sx + bk.drift) % w) + w) % w), sw = Math.min(8, w - src);
+          drawTodStrip(ctx, L, bk.cv, src, sw, h, sx, sy, a);
+          if (sw < 8) drawTodStrip(ctx, L, bk.cv, 0, 8 - sw, h, sx + sw, sy, a);
+        }
+      }
+      const p = g.player, f = this.fogAt(p.cx);
+      if (f > 0.01) {
+        const x = p.cx - cam.ix, y = p.y + p.h / 2 - cam.iy, col = fogCol(L);
+        const gr = ctx.createRadialGradient(x, y, 56, x, y, 180);
+        gr.addColorStop(0, C.rgba(col, 0));
+        gr.addColorStop(1, C.rgba(col, +(0.7 * f).toFixed(3)));
+        ctx.fillStyle = gr;
+        ctx.fillRect(0, 0, vw, vh);
+      }
     }
   }
 
+  World1Level.MAP = MAP;
   World1Level.DAY = DAY;
   World1Level.CHAOS_RED = 0.14;   // how much red Chaos puts in the sky
   World1Level.lightAt = lightAt;
