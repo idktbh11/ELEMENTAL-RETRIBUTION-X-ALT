@@ -310,6 +310,99 @@
       a.noiseBurst(d, { t, dur: 0.35, vol: 0.14, type: 'lowpass', freq: 1800, freqEnd: 300, release: 0.2 });
       a.tone(d, { wave: 'triangle', freq: 900, freqEnd: 200, slideTime: 0.25, t, dur: 0.25, vol: 0.05, release: 0.08 });
     },
+    // ---- the Deeper Ends' monsters (js/game/enemies-deep.js) ----
+    // dark slimes: a thick, low squelch; the big one bursts and splits in two
+    darkSlimeHurt(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 260, freqEnd: 120, t, dur: 0.1, vol: 0.09, release: 0.05 });
+      a.noiseBurst(d, { t, dur: 0.07, vol: 0.06, type: 'lowpass', freq: 500, release: 0.06 });
+    },
+    darkSlimeSplit(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 140, freqEnd: 420, slideTime: 0.12, t, dur: 0.12, vol: 0.1, release: 0.05 });
+      a.tone(d, { wave: 'sine', freq: 200, freqEnd: 560, slideTime: 0.1, t: t + 0.08, dur: 0.1, vol: 0.08, release: 0.05 });
+      a.noiseBurst(d, { t, dur: 0.16, vol: 0.08, type: 'lowpass', freq: 900, freqEnd: 300, release: 0.1 });
+    },
+    // vampires: a hiss, the snap of a bite, a gulp as it drinks, a shriek, a swarm of wings
+    vampireHiss(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.35, vol: 0.06, type: 'highpass', freq: 3800, attack: 0.04, release: 0.15 });
+      a.noiseBurst(d, { t, dur: 0.3, vol: 0.03, type: 'bandpass', freq: 6000, Q: 2, attack: 0.05, release: 0.12 });
+    },
+    vampireBite(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.04, vol: 0.1, type: 'highpass', freq: 2600, release: 0.03 });
+      a.tone(d, { wave: 'square', freq: 1100, freqEnd: 700, t, dur: 0.035, vol: 0.04, release: 0.02 });
+    },
+    vampireDrain(a, d, t) {
+      for (let i = 0; i < 2; i++) a.tone(d, { wave: 'sine', freq: 320 - i * 40, freqEnd: 140, slideTime: 0.12, t: t + i * 0.16, dur: 0.12, vol: 0.08, release: 0.06 });
+      a.tone(d, { wave: 'triangle', freq: 660, freqEnd: 990, slideTime: 0.3, t: t + 0.1, dur: 0.3, vol: 0.025, attack: 0.05, release: 0.1 });
+    },
+    vampireHurt(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: 1200, freqEnd: 700, t, dur: 0.1, vol: 0.03, release: 0.05, vibrato: 80, vibratoRate: 40, vibratoDelay: 0.01 });
+      a.noiseBurst(d, { t, dur: 0.08, vol: 0.04, type: 'highpass', freq: 4000, release: 0.05 });
+    },
+    vampireDie(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: 1400, freqEnd: 180, slideTime: 0.7, t, dur: 0.7, vol: 0.04, release: 0.15, vibrato: 60, vibratoRate: 24 });
+      a.noiseBurst(d, { t, dur: 0.6, vol: 0.05, type: 'highpass', freq: 3000, freqEnd: 800, release: 0.2 });
+    },
+    batSwarm(a, d, t) {
+      for (let i = 0; i < 7; i++) a.noiseBurst(d, { t: t + i * 0.045, dur: 0.03, vol: 0.05, type: 'bandpass', freq: rand(1400, 2600), Q: 2, release: 0.03, pan: rand(-0.4, 0.4) });
+      a.tone(d, { wave: 'sine', freq: rand(2600, 3200), freqEnd: 2000, t: t + 0.05, dur: 0.06, vol: 0.015, release: 0.03 });
+    },
+    // zombies: a groan, a lunge, a wet thud, a long moan; falling down, and dragging itself back up
+    zombieGroan(a, d, t) {
+      const f = rand(92, 118);
+      a.tone(d, { wave: 'sawtooth', freq: f, freqEnd: f * 0.78, slideTime: 0.8, t, dur: 0.8, vol: 0.05, attack: 0.15, release: 0.25, vibrato: 4, vibratoRate: 6 });
+      a.noiseBurst(d, { t, dur: 0.7, vol: 0.02, type: 'bandpass', freq: 500, Q: 2.5, attack: 0.2, release: 0.2 });
+    },
+    zombieGrab(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: 160, freqEnd: 110, t, dur: 0.18, vol: 0.06, release: 0.06 });
+      a.noiseBurst(d, { t, dur: 0.12, vol: 0.06, type: 'bandpass', freq: 1200, freqEnd: 500, Q: 1.2, release: 0.06 });
+    },
+    zombieHurt(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.06, vol: 0.08, type: 'lowpass', freq: 700, release: 0.05 });
+      a.tone(d, { wave: 'sawtooth', freq: 140, freqEnd: 100, t, dur: 0.12, vol: 0.05, release: 0.05 });
+    },
+    zombieDie(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: 130, freqEnd: 55, slideTime: 1.0, t, dur: 1.0, vol: 0.06, attack: 0.05, release: 0.3, vibrato: 5, vibratoRate: 5 });
+      a.noiseBurst(d, { t: t + 0.3, dur: 0.2, vol: 0.1, type: 'lowpass', freq: 500, release: 0.15 });
+    },
+    zombieFall(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 110, freqEnd: 45, t, dur: 0.2, vol: 0.16, release: 0.1 });
+      a.noiseBurst(d, { t, dur: 0.15, vol: 0.1, type: 'lowpass', freq: 600, release: 0.12 });
+    },
+    zombieRise(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: 70, freqEnd: 120, slideTime: 0.7, t, dur: 0.7, vol: 0.06, attack: 0.1, release: 0.2, vibrato: 3, vibratoRate: 7 });
+      for (let i = 0; i < 3; i++) a.noiseBurst(d, { t: t + 0.1 + i * 0.18, dur: 0.06, vol: 0.05, type: 'highpass', freq: 2200, release: 0.04 });   // bones cracking
+    },
+    // dark deepers: a rumble under the floor, the ground bursting open, a slurp as it sinks, a gurgling screech
+    deeperRumble(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 48, freqEnd: 62, slideTime: 0.7, t, dur: 0.7, vol: 0.16, attack: 0.15, release: 0.1, vibrato: 4, vibratoRate: 12 });
+      a.noiseBurst(d, { t, dur: 0.7, vol: 0.06, type: 'lowpass', freq: 220, freqEnd: 500, attack: 0.2, release: 0.1 });
+    },
+    deeperBurst(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.28, vol: 0.16, type: 'lowpass', freq: 1800, freqEnd: 300, release: 0.15 });
+      a.tone(d, { wave: 'sine', freq: 120, freqEnd: 40, t, dur: 0.25, vol: 0.16, release: 0.1 });
+      a.tone(d, { wave: 'sawtooth', freq: 300, freqEnd: 700, slideTime: 0.15, t: t + 0.05, dur: 0.15, vol: 0.03, release: 0.06 });
+    },
+    deeperSink(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 420, freqEnd: 90, slideTime: 0.4, t, dur: 0.4, vol: 0.07, release: 0.1 });
+      a.noiseBurst(d, { t, dur: 0.35, vol: 0.06, type: 'lowpass', freq: 900, freqEnd: 200, release: 0.12 });
+    },
+    deeperHurt(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: 360, freqEnd: 220, t, dur: 0.12, vol: 0.05, release: 0.05, vibrato: 50, vibratoRate: 35, vibratoDelay: 0.01 });
+      a.noiseBurst(d, { t, dur: 0.07, vol: 0.06, type: 'lowpass', freq: 800, release: 0.05 });
+    },
+    deeperDie(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: 420, freqEnd: 60, slideTime: 0.8, t, dur: 0.8, vol: 0.05, release: 0.2, vibrato: 40, vibratoRate: 20 });
+      a.noiseBurst(d, { t, dur: 0.6, vol: 0.1, type: 'lowpass', freq: 1200, freqEnd: 150, release: 0.25 });
+    },
+    // the pool in the basin: jumping in, and wading through
+    waterSplash(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.22, vol: 0.1, type: 'bandpass', freq: 1300, freqEnd: 600, Q: 0.9, release: 0.16 });
+      a.tone(d, { wave: 'sine', freq: 500, freqEnd: 1100, slideTime: 0.08, t, dur: 0.08, vol: 0.05, release: 0.05 });
+    },
+    waterWade(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.1, vol: 0.035, type: 'bandpass', freq: rand(800, 1200), Q: 1.1, release: 0.08 });
+      a.tone(d, { wave: 'sine', freq: rand(700, 900), freqEnd: rand(1000, 1300), t, dur: 0.04, vol: 0.015, release: 0.03 });
+    },
     levelUp(a, d, t) {
       [523, 659, 784, 1046].forEach((f, i) => a.tone(d, { wave: 'pulse25', freq: f, t: t + i * 0.07, dur: 0.08, vol: 0.08, release: 0.06 }));
       a.tone(d, { wave: 'pulse25', freq: 1318, t: t + 0.3, dur: 0.3, vol: 0.08, release: 0.3, vibrato: 14, vibratoDelay: 0.1 });

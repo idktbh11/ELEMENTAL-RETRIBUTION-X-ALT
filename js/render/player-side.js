@@ -12,6 +12,8 @@
  *     (the smooth, blended awakened animations: see js/game/awakening.js)
  *   ERX.PlayerSide.points(joints) -> where the eye / cheek / hands / feet are,
  *     relative to the feet anchor, facing right (flip dx when facing left)
+ * A look may carry its own colours (skinC / hairC / eyeC / outfitC / pantsC) plus an id for
+ *   the cache: that's how monsters are built on the same puppet (js/game/enemies-deep.js).
  * Extra joint flags: hideHands (hands in pockets), noLegs (lower body hidden),
  *   wind (freefall: hair, ponytails and scarves blow straight up; windPh 0..3 animates them).
  * Poses: idle(2) run(6) jump fall attack(3) block dash(3) hurt lie
@@ -81,11 +83,12 @@
     const D = ERX.Data.character;
     const b = new PB(26, 29);
 
-    const skin = D.skins[look.skin].c, skinD = C.shade(skin, -0.2), skinL = C.shade(skin, 0.15);
-    const hair = D.hairColors[look.hairColor].c, hairD = C.shade(hair, -0.3), hairL = C.shade(hair, 0.25);
-    const eye = D.eyeColors[look.eyes].c;
-    const out = D.outfitColors[look.outfitColor].c, outD = C.shade(out, -0.3), outL = C.shade(out, 0.22);
-    const pants = D.pantsColors[look.pants].c, pantsD = C.shade(pants, -0.32);
+    // a look can bring its own colours (monsters built on the same puppet: zombies, vampires...), else the palette's
+    const skin = look.skinC || D.skins[look.skin].c, skinD = C.shade(skin, -0.2), skinL = C.shade(skin, 0.15);
+    const hair = look.hairC || D.hairColors[look.hairColor].c, hairD = C.shade(hair, -0.3), hairL = C.shade(hair, 0.25);
+    const eye = look.eyeC || D.eyeColors[look.eyes].c;
+    const out = look.outfitC || D.outfitColors[look.outfitColor].c, outD = C.shade(out, -0.3), outL = C.shade(out, 0.22);
+    const pants = look.pantsC || D.pantsColors[look.pants].c, pantsD = C.shade(pants, -0.32);
     const outfit = look.outfit, hs = look.hair, fem = look.gender === 1;
 
     const px = (x, y, col) => b.set(Math.round(x) + OX, Math.round(y) + OY, c32(col));
@@ -300,7 +303,7 @@
     /** A frame for any joint set (floats are rounded; cached by the rounded pixels). */
     frameJoints(look, joints, facing = 1) {
       const p = roundJoints(joints);
-      const key = ['J', look.gender, look.skin, look.hair, look.hairColor, look.eyes, look.outfit, look.outfitColor, look.pants, look.hat || '', look.armor || '', jointKey(p), facing].join(',');
+      const key = ['J', look.id || '', look.gender, look.skin, look.hair, look.hairColor, look.eyes, look.outfit, look.outfitColor, look.pants, look.hat || '', look.armor || '', jointKey(p), facing].join(',');
       let cv = cache.get(key);
       if (!cv) {
         cv = paintPose(look, p).toCanvas();
@@ -333,7 +336,7 @@
 
     frame(look, pose = 'idle', frame = 0, facing = 1) {
       if (pose === 'walk') pose = 'run';
-      const key = [look.gender, look.skin, look.hair, look.hairColor, look.eyes, look.outfit, look.outfitColor, look.pants, look.hat || '', look.armor || '', pose, frame, facing].join(',');
+      const key = [look.id || '', look.gender, look.skin, look.hair, look.hairColor, look.eyes, look.outfit, look.outfitColor, look.pants, look.hat || '', look.armor || '', pose, frame, facing].join(',');
       let cv = cache.get(key);
       if (!cv) {
         const buf = pose === 'lie' ? rotate90(paint(look, 'hurt', 0)) : paint(look, pose, frame);

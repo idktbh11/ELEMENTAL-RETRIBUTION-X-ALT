@@ -283,6 +283,8 @@
         this.hudAlpha = 1;
         this.allowDeath = true;
         for (const n of L.npcs) this.npcs.push(Object.assign({ talkIndex: 0, t: 0 }, n));
+        // what lives down here: dark slimes, vampires, zombies, dark deepers, bats (js/game/enemies-deep.js)
+        for (const s of L.enemySpawns) this.enemies.push(ERX.Enemies.create(this, s));
         ERX.Audio.setAmbience('cave');
         if (opts.fallIn) {
           p.placeAt(L.landX, L.floorY - 280);

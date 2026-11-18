@@ -214,10 +214,11 @@
   }
 
   // =============================================================== SLIME
-  function slimeSprite(color, frame, big) {
-    const key = 'slime' + color + frame + big;
+  /** o (optional): { eye: glowing eye colour, rim: lit-edge colour, scale } (the Deeper Ends' dark slimes, js/game/enemies-deep.js). */
+  function slimeSprite(color, frame, big, o) {
+    const key = 'slime' + color + frame + big + (o ? JSON.stringify(o) : '');
     if (cache.has(key)) return cache.get(key);
-    const s = big ? 1.5 : 1;
+    const s = big ? 1.5 : o && o.scale ? o.scale : 1;
     const dims = [[14, 10], [17, 8], [11, 13]][frame];
     const w = Math.round(dims[0] * s), h = Math.round(dims[1] * s);
     const b = new PB(w + 2, h + 3);
@@ -230,14 +231,16 @@
         b.set(x, base - h + y, y > h * 0.7 || x > cx + hw * 0.5 ? dark : body);
       }
     }
+    // o.rim: a rim of light along its top (dark slimes, so they show up in the dark)
+    if (o && o.rim) for (let x = 0; x < b.w; x++) for (let y = 0; y < b.h; y++) if (b.solid(x, y)) { if (x < cx + w * 0.3) b.set(x, y, c32(o.rim)); break; }
     b.set(Math.round(cx - w * 0.25), base - h + 2, light);
     b.set(Math.round(cx - w * 0.25) + 1, base - h + 2, light);
     // eyes (looking slightly to the side) + a tiny frown
     const ey = base - Math.round(h * 0.55);
     for (const side of [-1, 1]) {
       const ex = Math.round(cx + side * 2.5 * s);
-      b.set(ex, ey, c32('#ffffff')); b.set(ex, ey + 1, c32(INK));
-      b.set(ex + side, ey - 1, c32(INK));
+      if (o && o.eye) { b.set(ex, ey, c32(o.eye)); b.set(ex, ey + 1, c32(C.shade(o.eye, -0.35))); b.set(ex + side, ey - 1, c32(INK)); }   // glowing eyes
+      else { b.set(ex, ey, c32('#ffffff')); b.set(ex, ey + 1, c32(INK)); b.set(ex + side, ey - 1, c32(INK)); }
     }
     b.outline(c32(INK));
     const cv = b.toCanvas();
@@ -726,7 +729,7 @@
       this.xp = 8;
       this.gold = 4;
       this.knockback = 1;
-      this.color = game.level.id === 'deep' ? '#7a4aa8' : '#5a3a7a';
+      this.color = game.level.id === 'deep' ? '#7a4aa8' : game.level.id === 'deeper' ? '#3e3060' : '#5a3a7a';
       this.state = 'hang';
       this.modeT = 0;
       this.drawOffset = 0;
@@ -1305,6 +1308,7 @@
   ERX.Enemies = {
     Enemy, Slime, Bat, Goblin, GoblinThrower, GoblinMage, Spewer, Wisp, Barricade, Projectile, ManaBomb, TYPES: ENEMY_TYPES,
     batSprite,   // the cave-in (js/game/cave-fall.js) has bats in it too
+    slimeSprite, whiteOf, INK,   // for the Deeper Ends' monsters (js/game/enemies-deep.js)
     create(game, spawn) {
       const T = ENEMY_TYPES[spawn.type];
       if (!T) return null;
