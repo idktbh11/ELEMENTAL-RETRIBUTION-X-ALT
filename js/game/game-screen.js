@@ -15,7 +15,7 @@
  * Progress (character.progress.stage): new -> tutorialDone -> enemiesCleared
  *   -> deepEnds -> reachedEnd -> awakened -> worldUnlocked -> deeperEnds (fell through
  *   world 1's old cave into THE DEEPER ENDS) -> abyss (through the floor of skulls,
- *   past the trial, into THE ABYSS). Flags on the side: trialDone, abyssIntro.
+ *   past the trial, into THE ABYSS). Flags on the side: trialDone, bossDefeated.
  *   Returning players resume at the right place. character.element is assigned ONLY at the reveal.
  */
 (function (ERX) {
@@ -130,6 +130,8 @@
       this.ripples = [];
       this.effects = [];
       this.cine = null;
+      this.cutscene = null;       // a boss's finale (js/game/finale.js)
+      this.titleCard = null;      // a boss's name, big
       this.transitioning = false;
       this.dialogue.close();
 
@@ -316,14 +318,14 @@
           this.runScript(ERX.Story.world.abyssArrival);
         } else {
           p.placeAt(L.spawn.x, L.spawn.y);
-          if (this.character.progress && this.character.progress.abyssIntro) {
-            // you've seen it already: the lights are on, the slime's waiting (the boss isn't)
-            L.lightAll();
-            L.introDone = true;
+          const won = this.character.progress && this.character.progress.bossDefeated;
+          if (won) {
+            // the Azure Zombie's beaten: the lights are on, the far passage is open, and the slime's guarding it
+            L.afterBoss();
             const s = this.npcs.find((n) => n.id === 'slime');
-            if (s) { s.hidden = false; s.x = L.slimeX; s.y = L.floorY; }
+            if (s) { s.hidden = false; s.x = L.slimeX; s.y = L.floorY; s.guard = true; }
           }
-          this.banner = { title: 'THE ABYSS', sub: 'The boss is late.', t: 0, dur: 4 };
+          this.banner = { title: 'THE ABYSS', sub: won ? 'Quiet, now.' : 'All the way down. Probably.', t: 0, dur: 4 };
         }
         this.darkness = L.darknessAt();
       } else {
@@ -939,6 +941,17 @@
         this.flashT = Math.max(0, (this.flashT || 0) - dt);
         return;
       }
+      // a boss's finale: the same, but it runs the show (js/game/finale.js)
+      if (this.cutscene) {
+        this.cutscene.update(dt);
+        this.fx.update(dt);
+        this.confetti.update(dt);
+        for (const f of this.floats) { f.t += dt; f.y -= (f.rise || 20) * dt; }
+        this.floats = this.floats.filter((f) => f.t < (f.dur || 0.9));
+        this.flashT = Math.max(0, (this.flashT || 0) - dt);
+        this.darkness = U.approach(this.darkness, this.level.darknessAt(this.player.cx, this.arenaLit), 1.4, dt);
+        return;
+      }
       // a freeze-frame after a heavy hit (awakened moves)
       this.impactT = Math.max(0, (this.impactT || 0) - dt);
       if (this.hitStop > 0) { this.hitStop -= dt; return; }
@@ -1003,6 +1016,14 @@
       }
       if (this.barkMsg) { this.barkMsg.t += dt; if (this.barkMsg.t > this.barkMsg.dur) this.barkMsg = null; }
       if (this.banner) { this.banner.t += dt; if (this.banner.t > this.banner.dur) this.banner = null; }
+      if (this.titleCard) { this.titleCard.t += dt; if (this.titleCard.t > this.titleCard.dur) this.titleCard = null; }
+      if (this.bossBar && this.bossBar.boss) {
+        // the boss's health bar drops in, and the chunk it just lost drains away after it
+        const bb = this.bossBar, e = bb.boss;
+        bb.t = (bb.t || 0) + dt;
+        bb.chip = U.approach(bb.chip === undefined ? 1 : bb.chip, Math.max(0, e.hp) / e.maxHp, 0.35, dt);
+        if (e.dead) this.bossBar = null;
+      }
       this.flashT = Math.max(0, (this.flashT || 0) - dt);
       this.hpShown = U.approach(this.hpShown || this.player.hp, this.player.hp, 6, dt);
       if (this.player.hurtT <= 0 && this.player.invulnT <= 0 && this.state === 'play') this.player.hp = Math.min(this.player.maxHp, this.player.hp + dt * 2);
@@ -1122,6 +1143,8 @@
       this.fall = new ERX.CaveFall(this);
       this.fall.onDone = (g) => ERX.Scenes.transition('fade', 0.8, () => g.loadLevel('deeper', { fallIn: true }), { silent: true });
     }
+    /** A boss at zero: its finale (js/game/finale.js) takes over until it's done. */
+    startBossFinale(boss) { this.cutscene = new ERX.Finale(this, boss); }
     /** The floor of skulls has gone and you're falling (js/game/abyss-fall.js), down into the abyss. */
     startAbyssFall() {
       this.enemies = [];
@@ -1311,6 +1334,7 @@
       }
       out.push({ x: this.player.cx, y: this.player.y + 10, r: 34, color: null, intensity: 1 });
       if (this.level.liveLights) for (const l of this.level.liveLights(this)) out.push(l);
+      if (this.cutscene) for (const l of this.cutscene.lights()) out.push(l);
       if (this.checkshot) out.push({ x: this.checkshot.x, y: this.checkshot.y - 26, r: this.checkshot.on ? 64 : 26, color: '#c89aff', intensity: 1 });
       const o = this.orb;
       if (o && o.state !== 'gone') out.push({ x: o.x, y: o.y, r: 96, color: ORB_LIGHTS[Math.floor(t * 3) % 6], intensity: 0.9 + 0.1 * Math.sin(t * 5) });
@@ -1392,6 +1416,7 @@
       for (const f of this.floats) F.draw(c, f.text, f.x - cam.ix, f.y - cam.iy, { color: f.color, outline: T.ink, align: 'center', alpha: f.dur ? U.clamp((f.dur - f.t) / 0.6, 0, 1) : 1 - f.t / 0.9 });
       this.lighting.render(c, cam, vw, vh, this.darkness, this._lights());
       ERX.ChaosWorld.render(c, this, vw, vh);
+      if (this.cutscene) this.cutscene.drawWorld(c, cam);
       if (this.flashT > 0) { c.fillStyle = 'rgba(255,255,255,' + Math.min(0.85, this.flashT * 2.5).toFixed(3) + ')'; c.fillRect(0, 0, vw, vh); }
       if (this.impactT > 0) {
         // impact frame: the whole screen in stark inverted black and white, for a blink
@@ -1429,7 +1454,8 @@
         F.draw(ctx, 'YOU DIED', W / 2, Math.round(H * 0.4), { scale: 2, color: '#ff6a4f', outline: T.ink, shadow: '#3a0008', shadowOffset: 2, align: 'center' });
         F.draw(ctx, '...for now. The Immortality Stone is warming up.', W / 2, Math.round(H * 0.4) + 22, { color: '#d4daf5', outline: T.ink, align: 'center' });
       }
-      if (!(uc && uc.bars > 0.3)) ERX.HUD.render(ctx, W, H, this);
+      if (this.cutscene) this.cutscene.drawScreen(ctx, W, H);
+      else if (!(uc && uc.bars > 0.3)) ERX.HUD.render(ctx, W, H, this);
       this.dialogue.render(ctx, W, H);
     }
 

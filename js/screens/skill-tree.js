@@ -4,6 +4,7 @@
  *   ELEMENT TREE   M1 (always known) -> 5 skills -> the ULTIMATE (any 3 skills), plus
  *                  upgrades for every move (stronger + a whole new look),
  *                  an element BLOCK and DASH upgrade, and STATUS POTENCY.
+ *                  No upgrade (anything with a +) until all 5 base skills are learned.
  *   STATS          Vitality / Focus / Agility (the old branches, kept small).
  *
  * Skill points are rare: levelling up brings one every ERX.Player.SKILL_EVERY levels (6, 12, 18...).
@@ -55,7 +56,8 @@
       this.backBtn = new Button({ label: 'BACK', icon: 'back', sound: null, onActivate: () => this.back() });
       this.onBack = false;
       this.items = [];
-      this.sel = this._el() ? 'm1+' : 'stat:vitality';   // (the tutorial wants a stat)
+      // (the tutorial wants a stat; after that, the next base skill to learn, since upgrades wait for all five)
+      this.sel = this._el() ? (['s1', 's2', 's3', 's4', 's5'].find((id) => this._rank(id) < 1) || 'm1+') : 'stat:vitality';
     }
     _el() { return this.game.element(); }
     _kit() { const el = this._el(); return el ? ERX.Abilities.kit(el.id) : null; }
@@ -65,7 +67,10 @@
       return s[slot] || 0;
     }
     _owned(n) { return n.id === 'potency' ? this._rank('potency') >= 3 : this._rank(n.slot) >= n.rank; }
+    /** All five base skills learned? (Nothing can be upgraded before that.) */
+    _allBase() { return ['s1', 's2', 's3', 's4', 's5'].every((id) => this._rank(id) >= 1); }
     _unlocked(n) {
+      if (n.rank === 2 && !this._allBase()) return false;
       if (n.slot !== 'potency' && n.rank === 2 && this._rank(n.slot) < 1) return false;
       if (n.needsAny) return ['s1', 's2', 's3', 's4', 's5'].filter((id) => this._rank(id) >= 1).length >= n.needsAny;
       return n.needs.every((id) => this._rank(id) >= 1);
@@ -91,7 +96,7 @@
       if (!kit) return deny('ELEMENT SKILLS: locked until your element reveals itself. It is shy.');
       const n = NODES.find((x) => x.id === id);
       if (this._owned(n)) return deny(n.id === 'm1' ? 'You already know your basic attack. Obviously.' : 'Already learned. You are welcome.');
-      if (!this._unlocked(n)) return deny(n.slot === 'ult' && n.rank === 1 ? 'Learn any 3 skills first.' : 'Learn the move below it first.');
+      if (!this._unlocked(n)) return deny(n.slot === 'ult' && n.rank === 1 ? 'Learn any 3 skills first.' : n.rank === 2 && !this._allBase() ? 'Learn all 5 base skills first.' : 'Learn the move below it first.');
       if (pts < n.cost) return deny('Needs ' + n.cost + ' skill point' + (n.cost > 1 ? 's' : '') + '. ' + earnMore());
       this.c.skillPoints = pts - n.cost;
       this.c.elementSkills[n.slot] = n.id === 'potency' ? this._rank('potency') + 1 : n.rank;
@@ -243,7 +248,7 @@
       const kit = this._kit(), el = this._el();
       if (!kit) return ['ELEMENT SKILLS', 'Locked until your element reveals itself.'];
       const n = NODES.find((x) => x.id === this.sel);
-      const state = this._owned(n) ? '{green}LEARNED{/}' : this._unlocked(n) ? 'Cost: {gold}' + n.cost + ' point' + (n.cost > 1 ? 's' : '') + '{/}' : '{red}LOCKED{/} ' + (n.slot === 'ult' && n.rank === 1 ? '(learn any 3 skills)' : '(learn the move below)');
+      const state = this._owned(n) ? '{green}LEARNED{/}' : this._unlocked(n) ? 'Cost: {gold}' + n.cost + ' point' + (n.cost > 1 ? 's' : '') + '{/}' : '{red}LOCKED{/} ' + (n.slot === 'ult' && n.rank === 1 ? '(learn any 3 skills)' : n.rank === 2 && !this._allBase() ? '(learn all 5 base skills first)' : '(learn the move below)');
       const status = ERX.Abilities.STATUS[kit.status];
       if (n.slot === 'potency') return ['STATUS POTENCY  ' + this._rank('potency') + '/3   ' + state, 'Your attacks inflict ' + (status ? '{el' + el.id + '}' + status.name + '{/}' : 'random statuses') + '. Each rank: lasts longer, hurts more.'];
       if (n.slot === 'block') return [kit.block[0].toUpperCase() + ' (UPGRADE)   ' + state, 'Your block becomes ' + kit.block[0] + '. Upgraded: guard lasts longer', 'and attackers who hit it get ' + (status ? status.name : 'a random status') + '.'];

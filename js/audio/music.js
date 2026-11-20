@@ -7,8 +7,10 @@
  *   bass:   per-bar pattern of chord degrees (R=root, 3, 5, 7, 8=octave up)
  *   arp:    per-bar list of chord-tone indices (wraps into higher octaves)
  *   stab:   per-bar pattern where 'x' plays the full chord briefly
+ *   guitar: per-bar pattern of power chords (root + fifth + octave): 'x' rings, 'm' is a
+ *           palm-muted chug, '-' holds (the voice is ERX.MusicVoices.guitar, js/audio/game-audio.js)
  *   drums:  per-bar pattern; a token may stack hits, e.g. 'kh'
- *           (k=kick, s=snare, c=clap, h=hat, o=open hat, x=shaker)
+ *           (k=kick, s=snare, c=clap, h=hat, o=open hat, x=shaker, t=tom, b=boom)
  *   swing:  0..0.3, delays every off-beat 16th for that bouncy feel
  *   once:   true = play through one time and stop (an ending), instead of looping
  *   fadeIn: seconds to fade in (default 2); an ending that has to hit on cue uses ~0
@@ -105,6 +107,18 @@
         }
       }
 
+      if (track.guitar) {
+        // power chords: the chord's root, its fifth and the octave
+        const pt = tokens(track.guitar.pattern), root = 12 * (track.guitar.octave + 1) + chord.root;
+        for (let s = 0; s < spb; s++) {
+          const tk = pt[s % pt.length];
+          if (tk !== 'x' && tk !== 'm') continue;
+          let len = 1;
+          while (s + len < spb && pt[(s + len) % pt.length] === '-') len++;
+          for (const iv of [0, 7, 12]) steps[base + s].push({ ch: 'guitar', midi: root + iv, len, mute: tk === 'm' });
+        }
+      }
+
       if (track.drums) {
         const pt = tokens(track.drums.pattern);
         for (let s = 0; s < spb; s++) {
@@ -162,6 +176,10 @@
         break;
       case 'x':
         a.noiseBurst(d, { t, dur: 0.05, vol: 0.045 * vol, type: 'bandpass', freq: 6500, Q: 1.5, attack: 0.015, release: 0.05 });
+        break;
+      case 't': // a low tom (war drums)
+        a.tone(d, { wave: 'sine', freq: 130, freqEnd: 72, slideTime: 0.2, t, dur: 0.2, vol: 0.4 * vol, attack: 0.002, release: 0.12 });
+        a.noiseBurst(d, { t, dur: 0.03, vol: 0.06 * vol, type: 'lowpass', freq: 900, release: 0.04 });
         break;
       case 'b': // a huge boom (a timpani hit in a cave)
         a.tone(d, { wave: 'sine', freq: 78, freqEnd: 36, slideTime: 0.6, t, dur: 0.6, vol: 0.65 * vol, attack: 0.003, release: 0.4 });
@@ -229,7 +247,7 @@
         if (ev.ch === 'lead' && leadResting) continue;
         const inst = tr[ev.ch] && tr[ev.ch].inst;
         const voice = VOICES[inst || ev.ch] || VOICES[ev.ch];
-        voice(this.a, this.out, midiToFreq(ev.midi), t, ev.len * this.stepDur, tr);
+        voice(this.a, this.out, midiToFreq(ev.midi), t, ev.len * this.stepDur, tr, ev);
       }
       // Remember when each beat will actually be heard (for beat-synced visuals).
       const hit = evs.some((e) => e.ch === 'drum' && (e.kind === 'k' || e.kind === 'c' || e.kind === 's'));

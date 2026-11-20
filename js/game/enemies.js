@@ -23,6 +23,12 @@
   const INK = '#120c16';
   const cache = new Map();
   let UID = 0;
+  // most attacks fly at chest height (and lobbed ones arc higher), and slimes and bats are knee-high:
+  // anything shorter than you still counts as your height when your attacks look for it (see Enemy.box)
+  const MIN_HIT = 22;
+  // every monster is this much tougher than its numbers below (not the training dummies, not the barricade;
+  // bosses, and anything marked fixedHp, set their own health)
+  const HP_MULT = 1.8;
 
   class Enemy {
     constructor(game, spawn) {
@@ -40,7 +46,17 @@
     }
     get cx() { return this.x + this.w / 2; }
     get cy() { return this.y + this.h / 2; }
-    get box() { return { x: this.x, y: this.y, w: this.w, h: this.h }; }
+    /** The real body: what touches you. */
+    get body() { return { x: this.x, y: this.y, w: this.w, h: this.h }; }
+    /**
+     * What your attacks have to touch: the body, but never shorter than MIN_HIT (so shots at chest height,
+     * and lobs on their way over, still hit a slime). It grows up from the feet, or (in the air) both ways.
+     */
+    get box() {
+      const h = Math.max(this.h, MIN_HIT);
+      const y = this.flying && !this.rooted ? this.y + this.h / 2 - h / 2 : this.y + this.h - h;
+      return { x: this.x, y, w: this.w, h };
+    }
 
     hurt(dmg, dir, crit, kb) {
       if (this.dead) return;
@@ -78,7 +94,7 @@
     contact() {
       const p = this.game.player;
       if (this.hurtT > 0 || p.invulnT > 0 || p.intangible || this.stunned() || this.isBlind()) return;
-      if (Physics.rectsOverlap(this.box, { x: p.x, y: p.y, w: p.w, h: p.h })) p.takeHit(this.damage, this.cx, this);
+      if (Physics.rectsOverlap(this.body, { x: p.x, y: p.y, w: p.w, h: p.h })) p.takeHit(this.damage, this.cx, this);
     }
 
     // ------------------------------------------------------------ status
@@ -1315,6 +1331,8 @@
       const e = new T(game, spawn);
       // carrying Chaos? The monsters push back harder (js/game/chaos-world.js)
       const d = ERX.ChaosWorld && spawn.type !== 'dummy' ? ERX.ChaosWorld.difficulty(game) : null;
+      // tougher, all of them (see HP_MULT)
+      if (spawn.type !== 'dummy' && spawn.type !== 'barricade' && !e.boss && !e.fixedHp && e.maxHp) { e.maxHp = Math.round(e.maxHp * HP_MULT); e.hp = e.maxHp; }
       if (d && d.hp !== 1) { e.maxHp = Math.round(e.maxHp * d.hp); e.hp = e.maxHp; if (e.damage) e.damage = Math.round(e.damage * d.damage); }
       // spawn.noReward: worth nothing when it dies, no XP and no gold (the Deeper Ends' trial waves)
       if (spawn.noReward) { e.noReward = true; e.xp = 0; e.gold = 0; }

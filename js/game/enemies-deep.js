@@ -415,6 +415,7 @@
       this.x = this.gx - this.w / 2; this.y = this.floorY + 400;
       this.maxHp = this.hp = 26; this.damage = 8; this.xp = 20; this.gold = 9;
       this.knockback = 0; this.immovable = true; this.flying = true;
+      this.rooted = true;    // (no gravity, but it grows out of the floor: its hit area stands on the floor too)
       this.color = '#3a2a5a';
       this.hurtSfx = 'deeperHurt'; this.dieSfx = 'deeperDie';
       this.state = 'burrow'; this.stateT = 0; this.trackT = 0; this.height = 0; this.bitten = false;

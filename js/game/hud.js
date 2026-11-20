@@ -174,7 +174,24 @@
       F.draw(ctx, w.title || '!! WARNING !!', W / 2, Math.round(H * 0.18) + 3, { scale: 1, color: '#ffffff', outline: ink, align: 'center' });
       F.draw(ctx, w.text || 'A TERRIFYING FOE APPROACHES', W / 2, Math.round(H * 0.18) + 12, { color: abyss ? '#ecd4ff' : '#ffd0d0', outline: ink, align: 'center' });
     }
-    if (g.bossBar) {
+    if (g.bossBar && g.bossBar.boss) {
+      // a real boss: its name over a health bar that drops down into place (the abyss: blue)
+      const bb = g.bossBar, e = bb.boss, col = bb.color || '#2a6aff', bw = Math.min(W - 60, 260), bx = Math.round(W / 2 - bw / 2);
+      const k = U.clamp((bb.t || 0) / 0.5, 0, 1), drop = k < 1 ? k * k : 1, by = Math.round(H - 24 - (1 - drop) * 34);   // it drops down into place
+      const hp = U.clamp(e.hp / e.maxHp, 0, 1), chip = U.clamp(bb.chip === undefined ? hp : bb.chip, hp, 1);
+      ctx.globalAlpha = a * Math.min(1, k * 2);
+      F.draw(ctx, bb.name, W / 2, by - 11, { color: bb.nameColor || '#8ad8ff', outline: T.ink, shadow: '#0a1a4a', shadowOffset: 1, align: 'center' });
+      T.rect(ctx, bx - 2, by - 2, bw + 4, 10, T.ink);
+      T.rect(ctx, bx - 1, by - 1, bw + 2, 8, '#3a5aa8');
+      T.rect(ctx, bx, by, bw, 6, '#0a1030');
+      T.rect(ctx, bx, by, Math.round(bw * chip), 6, '#c8e0ff');                                  // what it just lost, catching up
+      const fw = Math.round(bw * hp);
+      T.rect(ctx, bx, by, fw, 6, col);
+      T.rect(ctx, bx, by, fw, 1, ERX.Color.mix(col, '#ffffff', 0.5));
+      T.rect(ctx, bx, by + 5, fw, 1, ERX.Color.shade(col, -0.4));
+      if (bb.notch) T.rect(ctx, bx + Math.round(bw * bb.notch), by - 1, 1, 8, '#e8f4ff');           // where the second phase starts
+      ctx.globalAlpha = a;
+    } else if (g.bossBar) {
       const bw = Math.min(W - 60, 220), bx = Math.round(W / 2 - bw / 2), by = H - 30;
       if (!g.dialogue.active) {
         F.draw(ctx, g.bossBar.name, W / 2, by - 18, { scale: 1, color: '#ffd34d', outline: T.ink, align: 'center' });
@@ -182,6 +199,17 @@
         bar(ctx, bx, by + 2, bw, 5, 1, '#c8d0e0', '#5e6478');
         F.draw(ctx, 'HP: YES', W / 2, by + 10, { color: T.textDim, outline: T.ink, align: 'center' });
       }
+    }
+    // ---- a boss's name, big, as it shows what it really is ----
+    if (g.titleCard) {
+      const tc = g.titleCard, k = U.clamp(Math.min(tc.t / 0.25, (tc.dur - tc.t) / 0.6), 0, 1), pop = tc.t < 0.25 ? 1 + (1 - tc.t / 0.25) * 0.5 : 1;
+      const y = Math.round(H * 0.3), sc = Math.max(1, Math.round(3 * pop));
+      ctx.globalAlpha = a * k;
+      F.draw(ctx, tc.title, W / 2, y, { scale: sc, color: tc.color || '#8ad8ff', outline: '#000000', shadow: '#0a2a6a', shadowOffset: 3, align: 'center' });
+      const lw = Math.round(Math.min(1, tc.t / 0.5) * (F.measure(tc.title, 3) + 20));
+      T.rect(ctx, Math.round(W / 2 - lw / 2), y + 26, lw, 1, tc.color || '#8ad8ff');
+      if (tc.sub && tc.t > 0.5) F.draw(ctx, tc.sub, W / 2, y + 31, { color: '#d8ecff', outline: '#000000', align: 'center' });
+      ctx.globalAlpha = a;
     }
 
     // ---- the Voice's side comments ----

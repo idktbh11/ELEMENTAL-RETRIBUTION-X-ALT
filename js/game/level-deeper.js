@@ -349,7 +349,6 @@
       this.landX = 16.5 * TS;               // right under the hole
       this.spawn = { x: 22 * TS, y: FLOOR * TS };
       this.checkpoints = [this.spawn, ...[68, 94, 132, 172, 206].map((x) => ({ x: x * TS, y: FLOOR * TS }))];   // (+ one by the door, once the trial's done)
-      this.slimeExitX = 205 * TS;           // where the grumpy slime hops off to (it has somewhere to be)
 
       // ---- crystals, torches ----
       this.decor = [];
@@ -410,9 +409,6 @@
       this.torch = new T.Torch(this, torch(TRIAL.torchTx));      // the torch on the wall by the door: take it
       this.bones = new T.Bones(CORR.bonesFrom * TS, CORR.x1 * TS - 10, this.floorY, this.seed ^ 0xb0e5);
       this.dark = { collapsed: false };
-
-      // the grumpy slime: only here when you fall in (it drops in, has its say, and hops off: it has somewhere to be)
-      this.npcs.push({ id: 'slime', name: 'GRUMPY SLIME', x: this.landX + 64, y: this.floorY, facing: -1, hidden: true });
 
       // motes of light drifting about the cave (drawLive)
       this.motes = Array.from({ length: 96 }, () => ({ x: rng.range(4, TRIAL.x1 - 1) * TS, y: rng.range(8, FLOOR - 1) * TS, ph: rng.range(0, 6), sp: rng.range(0.3, 0.9), c: rng.pick(CRYSTALS).glow }));

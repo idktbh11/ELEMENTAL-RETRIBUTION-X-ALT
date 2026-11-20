@@ -231,7 +231,7 @@
     g.startCaveFall();
   }
 
-  // ================================================== THE DEEPER ENDS: you land. guess who.
+  // ================================================== THE DEEPER ENDS: you land.
   function* deeperArrival(g) {
     const p = g.player, L = g.level;
     g.lockControls(true);
@@ -256,29 +256,7 @@
     g.banner = { title: 'THE DEEPER ENDS', sub: 'Darker. Deeper. Weirdly groovy.', t: 0, dur: 4.5 };
     g.music('deeperends');
     g.saveProgress('deeperEnds');
-    yield 2.8;
-    // ...and who should drop in
-    const s = g.npcs.find((n) => n.id === 'slime');
-    if (s) {
-      s.hidden = false;
-      s.x = p.cx + 64; s.y = L.floorY - 240; s.vy = 0; s.falling = true; s.goX = null;
-      yield () => (s.falling ? undefined : true);
-      sfx('crash');
-      g.shake(4, 0.35);
-      yield 1.0;
-      yield* say(g, SLIME(), '...');
-      yield* say(g, SLIME(), 'You. AGAIN.');
-      yield* say(g, SLIME(), 'Did you just fall through the FLOOR? From WORLD 1?');
-      s.angry = true;
-      yield* say(g, SLIME(), 'Something told you to LEAVE, and you went DOWN instead. Unbelievable.', { effect: 'shake' });
-      s.angry = false;
-      yield* say(g, SLIME(), "This is the Deeper Ends. It's deeper. It's darker. And the very bottom of it is NOT finished.");
-      yield* say(g, SLIME(), "Look around if you must. Don't touch the crystals. They hum. And stay OUT of the Trial.");
-      yield* say(g, SLIME(), "Now if you'll excuse me, I have somewhere to be. Somewhere important. Do NOT follow me.");
-      g.dialogue.close();
-      s.goX = L.slimeExitX;            // off it hops (and then it's gone: it has somewhere to be)
-      s.leaving = true;
-    }
+    yield 1.0;
     g.lockControls(false);
   }
 
@@ -297,7 +275,7 @@
       g.banner = { title: 'THE TRIAL', sub: 'Six waves. No reward. No way out.', t: 0, dur: 3.2 };
       yield 2.4;
     }
-    g.music('onward');
+    g.music('trial');
     g.lockControls(false);
     T.state = 'between'; T.t = 0; T.pause = 0.6;   // here they come (again: from the wave you went down on)
   }
@@ -350,7 +328,11 @@
     yield 1.6;
     g.lockControls(false);
   }
-  /** Out in the middle: the lights slam on, the warning goes up, the music kicks in... and then the slime drops in. */
+  /**
+   * Out in the middle: the lights slam on, the warning goes up... and the sigil opens. Out of it drops
+   * a zombie. Just a zombie. A bit blue round the eyes. Then its hands go up in blue fire: the AZURE ZOMBIE.
+   * (The fight itself: js/game/boss-azure.js. Its end: js/game/finale.js, then abyssAfter.)
+   */
   function* abyssBoss(g) {
     const L = g.level, p = g.player;
     g.lockControls(true);
@@ -372,47 +354,73 @@
     g.focusCamera(L.centerX, L.floorY - 60);
     g.music('abyssboss');
     g.warning = { title: '!! WARNING !!', text: 'A BOSS ENEMY IS APPROACHING', style: 'abyss' };
-    g.rumble(5);
-    yield 5.4;
-    // ...from above?
-    const s = g.npcs.find((n) => n.id === 'slime');
-    if (s) {
-      s.hidden = false; s.x = L.centerX + 10; s.y = L.floorY - 300; s.vy = 0; s.falling = true; s.goX = null;
-      sfx('slimeWhistle');
-      yield () => (s.falling ? undefined : true);
-    }
-    // THUD. (and the needle comes off the record)
-    g.music(null);
-    sfx('recordScratch');
-    sfx('crash');
+    g.rumble(4);
+    yield 3.6;
+    // the sigil's eye opens into a portal, and something takes shape in it
+    L.portal = { k: 0, open: true };
+    sfx('azureEmerge');
+    const boss = ERX.Enemies.create(g, { type: 'azure', x: L.centerX, y: L.sigil.y + 11 });
+    g.enemies.push(boss);
+    yield 1.7;
     g.warning = false;
     g.rumbleT = 0;
-    g.shake(4, 0.35);
-    yield 1.1;
-    if (!s) { g.releaseCamera(); g.lockControls(false); return; }
-    yield* say(g, SLIME(), '...');
-    s.angry = true;
-    yield* say(g, SLIME(), 'NO. Nope. Turn it OFF.', { effect: 'shake' });
-    s.angry = false;
-    yield* say(g, SLIME(), "The boss isn't here yet.");
-    const c = yield* choose(g, ['Then why the WARNING?', "Who's the boss?"]);
-    if (c === 0) {
-      yield* say(g, SLIME(), 'Motion sensor. Somebody walked into the middle of the BOSS ARENA.');
-      yield* say(g, SLIME(), 'Somebody who is NOT the boss.');
-    } else {
-      yield* say(g, SLIME(), 'Classified.');
-      yield* say(g, SLIME(), "...Fine, I don't know. Nobody tells me anything. I wear the hard hat and I stand where they point.");
-    }
-    yield* say(g, SLIME(), 'And how did you even GET down here? You fell? AGAIN?');
-    yield* say(g, SLIME(), 'Through the floor of skulls. You walked on the skulls. EVERYBODY walks on the skulls.');
-    s.angry = true;
-    yield* say(g, SLIME(), "Wait here if you like. The boss comes when it's READY. And do NOT touch the lava.", { effect: 'shake' });
-    s.angry = false;
-    yield* say(g, SLIME(), "It's black. Black lava is the WORST lava.");
-    g.dialogue.close();
+    // ...and out it drops
+    boss.setState('drop');
+    L.portal.open = false;
+    yield () => (boss.state === 'stand' ? true : undefined);
+    g.music(null);
+    yield 0.9;
+    sfx('azureGroan');                 // ...a zombie. That's it? It just stands there.
+    yield 1.7;
+    // then its hands go up in blue fire
+    boss.igniting = true;
+    sfx('azureIgnite');
+    g.shake(3, 0.4);
+    yield 0.9;
+    g.titleCard = { title: 'AZURE ZOMBIE', sub: 'The Blue Flame That Walks', t: 0, dur: 3.2, color: '#8ad8ff' };
+    sfx('azureSting');
+    yield 2.0;
+    // its health bar drops down into place
+    g.bossBar = { name: 'AZURE ZOMBIE', boss, t: 0, chip: 1, color: '#2a6aff', notch: 0.5 };
+    yield 0.5;
+    sfx('bossBarDrop');
+    g.shake(2, 0.2);
+    yield 0.4;
+    g.music('azure');
     g.releaseCamera();
-    s.goX = L.slimeX;
-    g.saveFlag('abyssIntro');
+    boss.begin();
+    g.lockControls(false);
+  }
+  /** After the finale: the seal on the far passage breaks... and guess who drops in to guard it. */
+  function* abyssAfter(g) {
+    const L = g.level, p = g.player;
+    g.lockControls(true);
+    p.vx = 0;
+    g.saveFlag('bossDefeated');
+    yield 1.0;
+    L.unseal(g);
+    g.shake(3, 0.6);
+    yield 1.4;
+    const s = g.npcs.find((n) => n.id === 'slime');
+    if (s) {
+      g.focusCamera(L.slimeX - 60, L.floorY - 40);
+      s.hidden = false; s.x = L.slimeX; s.y = L.floorY - 300; s.vy = 0; s.falling = true; s.goX = null; s.guard = true;
+      sfx('slimeWhistle');
+      yield () => (s.falling ? undefined : true);
+      sfx('crash');
+      g.shake(4, 0.35);
+      yield 1.0;
+      yield* say(g, SLIME(), '...');
+      yield* say(g, SLIME(), 'You killed the boss.');
+      s.angry = true;
+      yield* say(g, SLIME(), 'Do you know how long that thing took to build? Do you have ANY idea?', { effect: 'shake' });
+      s.angry = false;
+      yield* say(g, SLIME(), '...The thing with your eyes was very cool, though. Very cool.');
+      yield* say(g, SLIME(), 'Anyway. This passage. Behind me. It is NOT finished. Hard hat zone.');
+      yield* say(g, SLIME(), 'So turn around and go... somewhere. Not here. Not past me.');
+      g.dialogue.close();
+      g.releaseCamera();
+    }
     g.lockControls(false);
   }
 
@@ -421,14 +429,13 @@
     deeper: [
       ['The crystals hum. All night. I have not slept in WEEKS.'],
       ['You fell. Through. The FLOOR. Who even does that.'],
-      ['Blue eyes? ...Never heard of them.', '...', 'Go away.'],
     ],
     abyss: [
-      ['The boss is late. Bosses are ALWAYS late. It is a whole thing with them.'],
-      ['When is it coming? Do I look like I carry a calendar?', 'I carry a hard hat. That is ALL I carry.'],
-      ['You walked on the skulls. The skulls fell. You fell.', 'You know that is not normal, right? Most people take the STAIRS.'],
-      ['Stop standing in the middle. That is where the BOSS stands.'],
-      ['The lights stay on now. Thanks to YOU. Do you know what purple fire costs down here?'],
+      ['Still not finished. Still guarding. Still not happy about it.'],
+      ['You beat the boss. Fine. You want a medal? We do not HAVE medals.'],
+      ['The passage goes DOWN. Further. It is a hole. A hole that is NOT FINISHED.'],
+      ['Do NOT touch the lava. It is black. Black lava is the WORST lava.'],
+      ['You walked on the skulls. The skulls fell. You fell. You beat the boss.', 'Some of us just stand here. All day. In a hard hat.'],
     ],
   };
   function* slimeTalk(g, n) {
@@ -441,5 +448,5 @@
     g.lockControls(false);
   }
 
-  ERX.Story.world = { vrd, jump, world1Arrival, checkshot, theBars, deeperArrival, trialStart, trialDone, skullCollapse, abyssArrival, abyssBoss, slimeTalk, EYES };
+  ERX.Story.world = { vrd, jump, world1Arrival, checkshot, theBars, deeperArrival, trialStart, trialDone, skullCollapse, abyssArrival, abyssBoss, abyssAfter, slimeTalk, EYES };
 })(window.ERX = window.ERX || {});

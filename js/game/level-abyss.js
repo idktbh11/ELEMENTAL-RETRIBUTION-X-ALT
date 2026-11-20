@@ -252,13 +252,17 @@
       // the slab you land on (two tiles thick, the whole way across), and a great pillar at each end
       this.solid(0, this.W, FLOOR, FLOOR + 2);
       this.solid(0, 3, 0, this.H); this.solid(this.W - 3, this.W, 0, this.H);
+      // a passage into the far pillar: sealed (blue runes) until the boss is dead. Beyond it: not finished.
+      this.air(this.W - 3, this.W, FLOOR - 3, FLOOR);
+      this.passage = { tx: this.W - 3, x: (this.W - 3) * TS, top: (FLOOR - 3) * TS, sealed: true, breakT: -1 };
+      this.setSeal(true);
       this.floorY = FLOOR * TS;
       this.underY = (FLOOR + 2) * TS;          // the slab's underside
       this.centerX = Math.round(this.W / 2) * TS;
       this.landX = 15 * TS;
       this.spawn = { x: 15 * TS, y: this.floorY };
-      this.triggerX = this.centerX - 7 * TS;   // walk this far out and the lights come on
-      this.slimeX = this.centerX - 2 * TS;     // ...and that's where the slime ends up standing
+      this.triggerX = this.centerX - 7 * TS;   // walk this far out and the lights come on (and it comes)
+      this.slimeX = this.passage.x - 10;       // after the boss: where the slime stands guard (in front of the passage)
       this.checkpoints = [this.spawn];
       this.decor = [];
       this.lights = [];
@@ -291,6 +295,23 @@
       this.lit = true;
       this.sigil.t = 9;
     }
+    /** The far passage's seal: solid while it's there. */
+    setSeal(on) {
+      const P = this.passage;
+      for (let ty = FLOOR - 3; ty < FLOOR; ty++) { const k = P.tx + ',' + ty; if (on) this.dynamicSolid.add(k); else this.dynamicSolid.delete(k); }
+      P.sealed = on;
+    }
+    /** The boss is dead: the seal cracks and falls away. */
+    unseal(g) {
+      const P = this.passage;
+      if (!P.sealed) return;
+      this.setSeal(false);
+      P.breakT = 0;
+      sfx('sealBreak');
+      if (g) for (let i = 0; i < 30; i++) g.fx.add({ x: P.x + 2 + Math.random() * 4, y: P.top + Math.random() * 48, vx: U.lerp(-80, -10, Math.random()), vy: U.lerp(-60, 30, Math.random()), ay: 300, life: U.lerp(0.5, 1, Math.random()), color: Math.random() < 0.5 ? '#4a8aff' : '#c8e8ff', size: Math.random() < 0.4 ? 2 : 1, fadeOut: 0.3 });
+    }
+    /** Back again after the boss: lights on, the passage open (and guarded). */
+    afterBoss() { this.lightAll(); this.setSeal(false); this.passage.breakT = 9; this.introDone = true; this.bossDone = true; }
 
     /** The slab's underside: rough black rock hanging down over the lava, dark crystals hanging off it. */
     renderBackWall() {
@@ -308,6 +329,9 @@
           for (let dx = -hw; dx <= hw; dx++) b.set(x + dx, top + k, c32(dx === -hw ? c.edge : k > len - 3 ? '#f0e4ff' : c.hue));
         }
       }
+      // the far passage: a tunnel into the pillar, black inside
+      const P = this.passage;
+      for (let y = P.top; y < this.floorY; y++) for (let x = P.x; x < this.pw; x++) b.set(x, y, c32((x - P.x) < 3 ? '#0e0a16' : '#040208'));
       b.outline(c32(INK));
       return b.toCanvas();
     }
@@ -341,6 +365,27 @@
       // the eye in the middle, closed until it's lit
       ctx.fillStyle = on ? '#2a0e4a' : '#0c0a12'; ctx.fillRect(Math.round(sx) - 7, Math.round(sy) - 2, 15, 5);
       if (on) { ctx.fillStyle = '#e8c8ff'; ctx.fillRect(Math.round(sx) - 5, Math.round(sy), 11, 1); ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 3, 3); }
+      // ...and when something's summoned, the eye opens into a portal of blue fire
+      const po = this.portal ? this.portal.k : 0;
+      if (po > 0) {
+        const r = Math.round(18 * po);
+        const gl = ctx.createRadialGradient(sx, sy, 2, sx, sy, r * 2.4);
+        gl.addColorStop(0, C.rgba('#4a8aff', 0.55 * po)); gl.addColorStop(1, C.rgba('#4a8aff', 0));
+        ctx.fillStyle = gl; ctx.fillRect(sx - r * 2.4, sy - r * 2.4, r * 4.8, r * 4.8);
+        // inside: blue fire, brightest in the middle (so whatever comes through is a dark shape against it)
+        const disc = (rr, col) => { if (rr < 1) return; ctx.fillStyle = col; for (let yy = -rr; yy <= rr; yy++) { const w = Math.floor(Math.sqrt(rr * rr - yy * yy) + 0.35); ctx.fillRect(Math.round(sx) - w, Math.round(sy) + yy, w * 2 + 1, 1); } };
+        disc(r, '#7ad0ff'); disc(r - 1, '#2a6aff'); disc(Math.round(r * 0.8), '#1a3aaa'); disc(Math.round(r * 0.62), '#3a7aff');
+        disc(Math.round(r * 0.4 + Math.sin(t * 7) * 0.8), '#9ad8ff'); disc(Math.round(r * 0.18), '#e8faff');
+        for (let i = 0; i < 28; i++) { const a = (i / 28) * Math.PI * 2 + t * (i % 2 ? 5 : -4), rr = r * (0.5 + 0.5 * ((i * 7) % 5) / 4); dot(sx + Math.cos(a) * rr, sy + Math.sin(a) * rr, i % 4 ? '#bfe8ff' : '#ffffff'); }
+      }
+      // the far passage: dark inside; sealed, a lattice of blue runes across its mouth
+      const P = this.passage, qx = P.x - cam.ix, qy = P.top - cam.iy, seal = P.sealed ? 1 : P.breakT >= 0 ? Math.max(0, 1 - P.breakT / 0.6) : 0;
+      if (seal > 0 && qx > -20 && qx < g.view.width + 20) {
+        ctx.globalAlpha = seal;
+        for (let i = 0; i < 4; i++) { ctx.fillStyle = '#1a3aaa'; ctx.fillRect(qx + 1 + i * 4, qy, 2, 48); ctx.fillStyle = Math.floor(t * 3 + i) % 4 === 0 ? '#c8e8ff' : '#4a8aff'; ctx.fillRect(qx + 2 + i * 4, qy, 1, 48); }
+        for (const yy of [10, 24, 38]) { ctx.fillStyle = '#4a8aff'; ctx.fillRect(qx, qy + yy, 16, 1); ctx.fillStyle = '#e8f4ff'; ctx.fillRect(qx + 6, qy + yy - 1, 3, 3); }
+        ctx.globalAlpha = 1;
+      }
       // the lamps: a stone post, a bowl of dark crystal on top; lit, a purple fire burns in it
       for (const L of this.lamps) {
         const x = Math.round(L.x) - cam.ix, y = Math.round(L.y) - cam.iy;
@@ -371,6 +416,8 @@
     update(dt, g) {
       for (const L of this.lamps) if (L.lit) L.t += dt;
       if (this.sigil.t >= 0) this.sigil.t += dt;
+      if (this.portal) this.portal.k = this.portal.open ? Math.min(1, this.portal.k + dt / 1.2) : Math.max(0, this.portal.k - dt / 0.6);
+      if (this.passage.breakT >= 0) this.passage.breakT += dt;
       // the lava, far below: blorp
       this.bubbleT -= dt;
       if (this.bubbleT <= 0) { this.bubbleT = U.lerp(1.5, 4, Math.random()); sfx('lavaBubble', { minGap: 0.4 }); }
@@ -386,6 +433,9 @@
       const out = [];
       for (const L of this.lamps) if (L.lit) out.push({ x: L.x, y: L.y - 54, r: 118 * (0.96 + 0.04 * Math.sin(g.t * 7 + L.ph)), color: '#a050ff', intensity: 1 });
       if (this.sigil.t >= 0) out.push({ x: this.sigil.x, y: this.sigil.y, r: 84, color: '#b46aff', intensity: 0.7 * Math.min(1, this.sigil.t / 0.6) });
+      if (this.portal && this.portal.k > 0) out.push({ x: this.sigil.x, y: this.sigil.y, r: 70, color: '#4a8aff', intensity: this.portal.k });
+      if (this.passage.sealed) out.push({ x: this.passage.x + 8, y: this.passage.top + 24, r: 40, color: '#4a8aff', intensity: 0.7 });
+      if (g && g.enemies) for (const e of g.enemies) { const l = e.light && !e.dead && !e.hidden ? e.light() : null; if (l) out.push(l); }   // the boss and its minions burn blue
       if (this.backdrop && g && g.camera) for (const l of this.backdrop.lights(g.camera)) out.push(l);
       return out;
     }

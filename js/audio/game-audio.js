@@ -115,6 +115,144 @@
     },
   });
 
+  // ---------------------------------------------------------- guitars (for the boss fight)
+  /** A soft-clipping curve for a WaveShaper: the fuzz pedal. Made once. */
+  function fuzz(a) {
+    if (a._fuzzCurve) return a._fuzzCurve;
+    const n = 2048, c = new Float32Array(n), k = 22;
+    for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = ((1 + k) * x) / (1 + k * Math.abs(x)); }
+    a._fuzzCurve = c;
+    return c;
+  }
+  /**
+   * One distorted guitar note: sawtooth oscillators -> fuzz -> a "cabinet" (lowpass) -> envelope -> out.
+   * o: { vol, len, tone (the cabinet's cutoff), detune [cents per oscillator], scoop (start this flat and bend up), vibrato, sustain, release }
+   */
+  function gtr(a, d, f, t, o) {
+    const ctx = a.ctx;
+    if (!ctx || !ctx.createWaveShaper) { a.tone(d, { wave: 'sawtooth', freq: f, t, dur: o.len, vol: o.vol * 0.6, attack: 0.004, release: 0.06 }); return; }
+    const pre = ctx.createGain(), sh = ctx.createWaveShaper(), cab = ctx.createBiquadFilter(), env = ctx.createGain();
+    pre.gain.value = 0.7;
+    sh.curve = fuzz(a); sh.oversample = '2x';
+    cab.type = 'lowpass'; cab.frequency.value = o.tone || 3000; cab.Q.value = 0.9;
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.linearRampToValueAtTime(o.vol, t + 0.004);
+    env.gain.setTargetAtTime(o.vol * (o.sustain || 0.75), t + 0.03, 0.1);
+    env.gain.setTargetAtTime(0.0001, t + o.len, o.release || 0.05);
+    pre.connect(sh); sh.connect(cab); cab.connect(env); env.connect(d);
+    const end = t + o.len + 0.4;
+    for (const det of o.detune || [-7, 7]) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.detune.value = det;
+      if (o.scoop) { osc.frequency.setValueAtTime(f * o.scoop, t); osc.frequency.exponentialRampToValueAtTime(f, t + 0.06); }
+      else osc.frequency.setValueAtTime(f, t);
+      if (o.vibrato) {
+        const lfo = ctx.createOscillator(), lg = ctx.createGain();
+        lfo.frequency.value = 6; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * o.vibrato, t + 0.25);
+        lfo.connect(lg); lg.connect(osc.frequency); lfo.start(t); lfo.stop(end);
+      }
+      osc.connect(pre); osc.start(t); osc.stop(end);
+    }
+  }
+  /**
+   * A horror-film BRAAAM: detuned sawtooths through the fuzz, into a filter that blares open and slowly
+   * closes. freqs: the notes (low, and clashing). o: { vol, len, open, close (filter Hz), sag (pitch drop) }
+   */
+  function braam(a, d, t, freqs, o) {
+    const ctx = a.ctx, len = o.len || 2, vol = o.vol || 0.08;
+    if (!ctx || !ctx.createWaveShaper) {
+      for (const f of freqs) a.tone(d, { wave: 'sawtooth', freq: f, freqEnd: o.sag ? f * o.sag : undefined, slideTime: len, t, dur: len, vol: vol * 0.45, attack: 0.03, release: 0.8 });
+      return;
+    }
+    const pre = ctx.createGain(), sh = ctx.createWaveShaper(), lp = ctx.createBiquadFilter(), env = ctx.createGain();
+    pre.gain.value = 0.45;
+    sh.curve = fuzz(a); sh.oversample = '2x';
+    lp.type = 'lowpass'; lp.Q.value = 3;
+    lp.frequency.setValueAtTime(140, t);
+    lp.frequency.exponentialRampToValueAtTime(o.open || 1500, t + 0.09);
+    lp.frequency.exponentialRampToValueAtTime(o.close || 260, t + len);
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.linearRampToValueAtTime(vol, t + 0.025);
+    env.gain.setTargetAtTime(vol * 0.55, t + 0.12, 0.35);
+    env.gain.setTargetAtTime(0.0001, t + len, 0.4);
+    pre.connect(sh); sh.connect(lp); lp.connect(env); env.connect(d);
+    const end = t + len + 2;
+    for (const f of freqs) for (const det of [-12, 0, 13]) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth'; osc.detune.value = det;
+      osc.frequency.setValueAtTime(f, t);
+      if (o.sag) osc.frequency.exponentialRampToValueAtTime(f * o.sag, t + len);
+      osc.connect(pre); osc.start(t); osc.stop(end);
+    }
+  }
+  /** Rhythm guitar (the guitar channel's power chords): ringing ('x'), or palm-muted chugs ('m'). */
+  V.guitar = (a, d, f, t, dur, tr, ev) => {
+    const mute = ev && ev.mute, g = tr.guitar;
+    gtr(a, d, f, t, { vol: g.vol * (mute ? 0.85 : 1), len: mute ? Math.min(dur, 0.08) : Math.min(dur * 0.95, 1.2), tone: mute ? 1300 : 3200, detune: mute ? [0] : [-6, 6], release: mute ? 0.025 : 0.08, sustain: mute ? 0.5 : 0.8 });
+  };
+  /** Lead guitar: it scoops up into every note and adds vibrato as it holds. */
+  V.shred = (a, d, f, t, dur, tr) => {
+    gtr(a, d, f, t, { vol: tr.lead.vol, len: Math.min(dur * 0.95, 1.4), tone: 4200, detune: [-4, 5], scoop: 0.94, vibrato: 0.012, sustain: 0.85, release: 0.09 });
+  };
+  // ---------------------------------------------------------- an orchestra (for the trial)
+  /** Brass stabs (the stab channel): a short punchy swell. */
+  V.brass = (a, d, f, t, dur, tr) => {
+    const v = tr.stab.vol;
+    a.tone(d, { wave: 'sawtooth', freq: f, t, dur: 0.22, vol: v, attack: 0.03, decay: 0.12, sustain: 0.6, release: 0.12 });
+    a.tone(d, { wave: 'square', freq: f * 1.003, t, dur: 0.2, vol: v * 0.4, attack: 0.04, release: 0.1 });
+  };
+  /** A heroic horn (the lead channel). */
+  V.horn = (a, d, f, t, dur, tr) => {
+    const v = tr.lead.vol, len = Math.min(dur * 0.92, 1.2);
+    a.tone(d, { wave: 'sawtooth', freq: f, t, dur: len, vol: v * 0.7, attack: 0.05, decay: 0.2, sustain: 0.8, release: 0.12, vibrato: f * 0.008, vibratoRate: 5, vibratoDelay: 0.2 });
+    a.tone(d, { wave: 'triangle', freq: f, t, dur: len, vol: v * 0.6, attack: 0.03, release: 0.12 });
+    a.tone(d, { wave: 'square', freq: f / 2, t, dur: len, vol: v * 0.2, attack: 0.06, release: 0.1 });
+  };
+  /** A choir holding the chord (the pad channel). */
+  V.choirPad = (a, d, f, t, dur, tr) => {
+    const v = tr.pad.vol, len = dur * 0.98;
+    a.tone(d, { wave: 'sawtooth', freq: f, t, dur: len, vol: v * 0.5, attack: 0.3, release: 0.4, vibrato: f * 0.01, vibratoRate: 4.5, vibratoDelay: 0.3 });
+    a.tone(d, { wave: 'triangle', freq: f * 1.005, t, dur: len, vol: v * 0.7, attack: 0.25, release: 0.4 });
+  };
+
+  Object.assign(ERX.MusicTracks, {
+    // THE TRIAL: war drums, brass, strings sawing away underneath, a choir. Prove yourself.
+    trial: {
+      title: 'Six Waves',
+      bpm: 132, stepsPerBar: 16, swing: 0, restEvery: 0,
+      chords: 'Dm Dm Bb C Dm Dm Gm A',
+      lead: {
+        inst: 'horn', vol: 0.045, res: 8,
+        notes:
+          'D5 - - A4 D5 - F5 - | E5 - D5 - C5 - A4 - | Bb4 - - D5 F5 - Bb5 - | A5 - G5 - E5 - C5 - | ' +
+          'D5 - F5 - A5 - D6 - | C6 - A5 - F5 - D5 - | G5 - Bb5 - D6 - C6 Bb5 | A5 - - - C#6 - E6 -',
+      },
+      bass: { octave: 2, vol: 0.2, pattern: 'R . . R . . R . R . . R . R 8 .' },
+      arp: { octave: 4, vol: 0.015, wave: 'triangle', pattern: [0, 1, 2, 1, 0, 1, 2, 1, 0, 1, 2, 1, 0, 1, 2, 3] },
+      stab: { octave: 4, vol: 0.026, inst: 'brass', pattern: 'x . . x . . x . . . x . x . . .' },
+      pad: { octave: 3, vol: 0.016, inst: 'choirPad' },
+      drums: { vol: 0.95, pattern: 'bk . t . ks . t t bk . t . ks t t h' },
+    },
+    // THE AZURE ZOMBIE: the boss fight. Galloping palm-muted guitars, a screaming lead guitar,
+    // double-kick drums. E minor, 172 bpm, no mercy.
+    azure: {
+      title: 'Blue Flame Rampage',
+      bpm: 172, stepsPerBar: 16, swing: 0, restEvery: 0, fadeIn: 0.05,
+      chords: 'Em Em C D Em Em Am B',
+      lead: {
+        inst: 'shred', vol: 0.04, res: 8,
+        notes:
+          'E5 - G5 - B5 - A5 G5 | F#5 - G5 - E5 - - - | C6 - B5 - A5 - G5 - | A5 - F#5 - D5 - - - | ' +
+          'E5 - G5 - B5 - E6 - | D6 - B5 - G5 - - - | A5 - C6 - E6 - D6 C6 | B5 - - - D#6 - F#6 -',
+      },
+      guitar: { octave: 2, vol: 0.05, pattern: 'x - m m x - m m x - m m x - x -' },
+      bass: { octave: 2, vol: 0.2, pattern: 'R . R R R . R R R . R R R . 8 .' },
+      pad: { octave: 2, vol: 0.012, inst: 'drone' },
+      drums: { vol: 1, pattern: 'kx k kh k ks k kh k kh k kh k ks k kh ks' },
+    },
+  });
+
   // A glassy crystal lead for the Deeper Ends: a sine body, a bright ping on top, and an echo off the cave walls.
   V.crystal = (a, d, f, t, dur, tr) => {
     const v = tr.lead.vol;
@@ -496,6 +634,139 @@
     },
     lavaBubble(a, d, t) {     // the black lava, far below: blorp
       a.tone(d, { wave: 'sine', freq: rand(60, 90), freqEnd: rand(110, 150), slideTime: 0.12, t, dur: 0.14, vol: 0.05, attack: 0.02, release: 0.1 });
+    },
+    // ---- the Azure Zombie (js/game/boss-azure.js) and its finale (js/game/finale.js) ----
+    azureEmerge(a, d, t) {    // the sigil's eye tears open into a portal... (a rush, two drones a semitone apart, a heartbeat from the other side, whispers)
+      a.noiseBurst(d, { t, dur: 1.7, vol: 0.1, type: 'bandpass', freq: 160, freqEnd: 1600, Q: 1.6, attack: 1.2, release: 0.6 });
+      a.tone(d, { wave: 'sawtooth', freq: 55, freqEnd: 82.4, slideTime: 1.7, t, dur: 1.7, vol: 0.07, attack: 0.6, release: 0.5, vibrato: 3, vibratoRate: 7 });
+      a.tone(d, { wave: 'sawtooth', freq: 58.3, freqEnd: 87.3, slideTime: 1.7, t, dur: 1.7, vol: 0.05, attack: 0.6, release: 0.5, vibrato: 4, vibratoRate: 6 });
+      for (let i = 0; i < 4; i++) a.tone(d, { wave: 'sine', freq: 48, freqEnd: 34, t: t + 0.2 + i * 0.4, dur: 0.15, vol: 0.18, release: 0.15 });
+      a.noiseBurst(d, { t: t + 0.3, dur: 1.4, vol: 0.035, type: 'bandpass', freq: 2600, freqEnd: 1800, Q: 6, attack: 0.5, release: 0.6 });
+    },
+    azureGroan(a, d, t) {     // ...out drops a zombie. It groans. That's it.
+      const f = rand(88, 100);
+      a.tone(d, { wave: 'sawtooth', freq: f, freqEnd: f * 0.8, slideTime: 0.9, t, dur: 0.9, vol: 0.05, attack: 0.15, release: 0.3, vibrato: 4, vibratoRate: 6 });
+    },
+    azureIgnite(a, d, t) {    // its hands go up in blue fire: a WHOOMPH, its snarl, and dread climbing straight into the name (0.9 s later)
+      a.noiseBurst(d, { t, dur: 0.7, vol: 0.2, type: 'bandpass', freq: 250, freqEnd: 2800, Q: 0.9, attack: 0.03, release: 0.5 });
+      a.tone(d, { wave: 'sine', freq: 70, freqEnd: 34, t, dur: 0.6, vol: 0.26, release: 0.3 });
+      a.tone(d, { wave: 'sawtooth', freq: 82, freqEnd: 62, slideTime: 0.9, t, dur: 0.9, vol: 0.1, attack: 0.03, release: 0.3, vibrato: 16, vibratoRate: 30 });
+      // two strings a semitone apart, sliding up an octave together
+      a.tone(d, { wave: 'sawtooth', freq: 233, freqEnd: 466, slideTime: 0.8, t: t + 0.1, dur: 0.8, vol: 0.024, attack: 0.6, release: 0.04, vibrato: 6, vibratoRate: 7 });
+      a.tone(d, { wave: 'sawtooth', freq: 247, freqEnd: 494, slideTime: 0.8, t: t + 0.1, dur: 0.8, vol: 0.024, attack: 0.6, release: 0.04, vibrato: 6, vibratoRate: 6 });
+      a.noiseBurst(d, { t: t + 0.1, dur: 0.8, vol: 0.07, type: 'highpass', freq: 2500, attack: 0.78, release: 0.03 });   // (a cymbal, backwards)
+      for (let i = 0; i < 26; i++) a.noiseBurst(d, { t: t + 0.08 + Math.random() * 0.9, dur: 0.01, vol: 0.05, type: 'bandpass', freq: rand(1800, 4200), Q: 3, release: 0.015 });
+    },
+    azureSting(a, d, t) {     // AZURE ZOMBIE: BRAAAM. Low, wrong (E against F, and the tritone), and very loud
+      braam(a, d, t, [41.2, 82.41, 87.31, 116.54], { vol: 0.12, len: 2.6, open: 1800, close: 200, sag: 0.93 });
+      a.tone(d, { wave: 'sine', freq: 62, freqEnd: 26, slideTime: 2.0, t, dur: 2.0, vol: 0.32, attack: 0.01, release: 0.8 });   // the sub drop
+      a.noiseBurst(d, { t, dur: 1.2, vol: 0.2, type: 'lowpass', freq: 1400, freqEnd: 90, release: 1.0 });                     // the impact
+      // a thin, high scream over the top: two notes a semitone apart, wavering
+      a.tone(d, { wave: 'sine', freq: 1864.7, t: t + 0.05, dur: 1.8, vol: 0.018, attack: 0.25, release: 0.8, vibrato: 22, vibratoRate: 5.5 });
+      a.tone(d, { wave: 'sine', freq: 1975.5, t: t + 0.05, dur: 1.8, vol: 0.016, attack: 0.25, release: 0.8, vibrato: 25, vibratoRate: 6.3 });
+      // and under it all, the thing itself, growling
+      a.tone(d, { wave: 'sawtooth', freq: 58, freqEnd: 46, slideTime: 2.2, t: t + 0.1, dur: 2.2, vol: 0.09, attack: 0.2, release: 0.6, vibrato: 9, vibratoRate: 31 });
+      a.noiseBurst(d, { t: t + 0.1, dur: 2.0, vol: 0.07, type: 'bandpass', freq: 220, Q: 2.5, attack: 0.3, release: 1.6 });
+    },
+    bossBarDrop(a, d, t) {    // the health bar slams down into place: a heavy, dissonant iron CLANG
+      a.tone(d, { wave: 'sine', freq: 95, freqEnd: 40, t, dur: 0.3, vol: 0.24, release: 0.2 });
+      a.noiseBurst(d, { t, dur: 0.12, vol: 0.14, type: 'lowpass', freq: 1800, release: 0.12 });
+      a.tone(d, { wave: 'triangle', freq: 311, t: t + 0.01, dur: 0.02, vol: 0.06, attack: 0.002, release: 0.9 });
+      a.tone(d, { wave: 'triangle', freq: 330, t: t + 0.01, dur: 0.02, vol: 0.05, attack: 0.002, release: 0.8 });
+      a.tone(d, { wave: 'square', freq: 155.6, t: t + 0.01, dur: 0.05, vol: 0.03, release: 0.4 });
+    },
+    azureRoar(a, d, t) {      // a big roar
+      a.tone(d, { wave: 'sawtooth', freq: 120, freqEnd: 70, slideTime: 1.3, t, dur: 1.3, vol: 0.13, attack: 0.08, release: 0.4, vibrato: 9, vibratoRate: 22 });
+      a.tone(d, { wave: 'square', freq: 180, freqEnd: 95, slideTime: 1.2, t, dur: 1.2, vol: 0.05, attack: 0.1, release: 0.4, vibrato: 12, vibratoRate: 30 });
+      a.noiseBurst(d, { t, dur: 1.2, vol: 0.14, type: 'bandpass', freq: 700, freqEnd: 300, Q: 0.8, attack: 0.1, release: 0.5 });
+    },
+    azureClaw(a, d, t) {      // a swipe of blue fire
+      a.noiseBurst(d, { t, dur: 0.14, vol: 0.12, type: 'bandpass', freq: 900, freqEnd: 3200, Q: 1.2, attack: 0.01, release: 0.08 });
+      for (let i = 0; i < 5; i++) a.noiseBurst(d, { t: t + i * 0.02, dur: 0.01, vol: 0.05, type: 'highpass', freq: 3000, release: 0.015 });
+    },
+    azureLeap(a, d, t) { a.noiseBurst(d, { t, dur: 0.3, vol: 0.08, type: 'bandpass', freq: 400, freqEnd: 1600, Q: 1, attack: 0.05, release: 0.15 }); },
+    azureSlam(a, d, t) {      // it lands: the floor takes it badly
+      a.tone(d, { wave: 'sine', freq: 110, freqEnd: 38, t, dur: 0.45, vol: 0.26, release: 0.3 });
+      a.noiseBurst(d, { t, dur: 0.4, vol: 0.18, type: 'lowpass', freq: 1200, freqEnd: 200, release: 0.3 });
+      for (let i = 0; i < 12; i++) a.noiseBurst(d, { t: t + Math.random() * 0.4, dur: 0.01, vol: 0.05, type: 'bandpass', freq: rand(1800, 3600), Q: 3, release: 0.015 });
+    },
+    azureFireball(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.25, vol: 0.1, type: 'bandpass', freq: 500, freqEnd: 2200, Q: 1, attack: 0.02, release: 0.12 });
+      a.tone(d, { wave: 'triangle', freq: 300, freqEnd: 600, t, dur: 0.15, vol: 0.04, release: 0.08 });
+    },
+    azureBurst(a, d, t) {     // a blue fireball going off
+      a.noiseBurst(d, { t, dur: 0.18, vol: 0.12, type: 'lowpass', freq: 2000, freqEnd: 400, release: 0.12 });
+      a.tone(d, { wave: 'sine', freq: 200, freqEnd: 70, t, dur: 0.15, vol: 0.1, release: 0.08 });
+    },
+    azureHurt(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: 150, freqEnd: 110, t, dur: 0.12, vol: 0.05, release: 0.05 });
+      a.noiseBurst(d, { t, dur: 0.06, vol: 0.06, type: 'lowpass', freq: 700, release: 0.05 });
+    },
+    azureSummon(a, d, t) {    // up out of the floor, in blue fire: little ones
+      a.tone(d, { wave: 'sawtooth', freq: 62, freqEnd: 124, slideTime: 1.0, t, dur: 1.0, vol: 0.07, attack: 0.3, release: 0.3, vibrato: 4, vibratoRate: 8 });
+      a.noiseBurst(d, { t, dur: 1.0, vol: 0.08, type: 'bandpass', freq: 250, freqEnd: 1800, Q: 1.3, attack: 0.4, release: 0.3 });
+    },
+    azureInhale(a, d, t) {    // it draws breath: a long, rattling, rising hiss
+      a.noiseBurst(d, { t, dur: 0.6, vol: 0.1, type: 'bandpass', freq: 400, freqEnd: 2400, Q: 1.4, attack: 0.5, release: 0.08 });
+      a.tone(d, { wave: 'sawtooth', freq: 70, freqEnd: 95, slideTime: 0.6, t, dur: 0.6, vol: 0.05, attack: 0.4, release: 0.05, vibrato: 10, vibratoRate: 26 });
+    },
+    azureBreath(a, d, t) {    // ...and a roaring stream of blue fire
+      for (let i = 0; i < 5; i++) a.noiseBurst(d, { t: t + i * 0.24, dur: 0.3, vol: 0.13, type: 'lowpass', freq: 1100 + (i % 2) * 300, Q: 0.7, attack: 0.04, release: 0.4 });
+      a.noiseBurst(d, { t, dur: 1.2, vol: 0.07, type: 'bandpass', freq: 2400, freqEnd: 900, Q: 0.8, attack: 0.05, release: 1.2 });
+      a.tone(d, { wave: 'sawtooth', freq: 62, t, dur: 1.2, vol: 0.05, attack: 0.05, release: 0.3, vibrato: 8, vibratoRate: 24 });
+    },
+    azureSnarl(a, d, t) {     // a low, wet snarl (it's about to do something)
+      a.tone(d, { wave: 'sawtooth', freq: 95, freqEnd: 75, slideTime: 0.55, t, dur: 0.55, vol: 0.09, attack: 0.04, release: 0.2, vibrato: 14, vibratoRate: 32 });
+      a.noiseBurst(d, { t, dur: 0.5, vol: 0.08, type: 'bandpass', freq: 500, Q: 1.2, attack: 0.04, release: 0.4 });
+    },
+    azureCharge(a, d, t) {    // and it's off
+      a.noiseBurst(d, { t, dur: 0.4, vol: 0.12, type: 'bandpass', freq: 300, freqEnd: 1800, Q: 1, attack: 0.02, release: 0.25 });
+      a.tone(d, { wave: 'sawtooth', freq: 140, freqEnd: 90, t, dur: 0.5, vol: 0.07, attack: 0.02, release: 0.2, vibrato: 12, vibratoRate: 28 });
+    },
+    azureStomp(a, d, t) {     // its feet, pounding the floor flat out
+      a.tone(d, { wave: 'sine', freq: 80, freqEnd: 40, t, dur: 0.08, vol: 0.14, release: 0.06 });
+      a.noiseBurst(d, { t, dur: 0.05, vol: 0.06, type: 'lowpass', freq: 600, release: 0.05 });
+    },
+    azureWallHit(a, d, t) {   // WHAM. (a bit of the wall comes down, and it's seeing stars)
+      a.tone(d, { wave: 'sine', freq: 120, freqEnd: 32, t, dur: 0.6, vol: 0.32, release: 0.4 });
+      a.noiseBurst(d, { t, dur: 0.5, vol: 0.24, type: 'lowpass', freq: 2200, freqEnd: 180, release: 0.4 });
+      for (let i = 0; i < 10; i++) a.noiseBurst(d, { t: t + 0.12 + Math.random() * 0.6, dur: 0.02, vol: 0.05, type: 'bandpass', freq: rand(400, 1400), Q: 2, release: 0.04 });
+      a.tone(d, { wave: 'triangle', freq: 620, freqEnd: 300, t: t + 0.25, dur: 0.6, vol: 0.03, release: 0.3, vibrato: 30, vibratoRate: 9 });
+    },
+    azureSkid(a, d, t) { a.noiseBurst(d, { t, dur: 0.4, vol: 0.09, type: 'bandpass', freq: 1400, freqEnd: 500, Q: 1.5, attack: 0.01, release: 0.3 }); },
+    azureKindle(a, d, t) {    // fire gathering in its hand
+      a.noiseBurst(d, { t, dur: 0.45, vol: 0.08, type: 'bandpass', freq: 600, freqEnd: 2600, Q: 1.6, attack: 0.35, release: 0.08 });
+      a.tone(d, { wave: 'triangle', freq: 180, freqEnd: 420, slideTime: 0.45, t, dur: 0.45, vol: 0.04, attack: 0.3, release: 0.05 });
+    },
+    azureGeyser(a, d, t) {    // blue fire bursting up out of the floor
+      a.noiseBurst(d, { t, dur: 0.45, vol: 0.14, type: 'bandpass', freq: 250, freqEnd: 3000, Q: 0.9, attack: 0.01, release: 0.35 });
+      a.tone(d, { wave: 'sine', freq: 70, freqEnd: 140, t, dur: 0.2, vol: 0.14, release: 0.15 });
+    },
+    azureMeteor(a, d, t) {    // something coming down out of the dark, fast, and burning
+      a.tone(d, { wave: 'sawtooth', freq: 1400, freqEnd: 300, slideTime: 0.7, t, dur: 0.7, vol: 0.025, attack: 0.05, release: 0.1 });
+      a.noiseBurst(d, { t, dur: 0.7, vol: 0.08, type: 'bandpass', freq: 3000, freqEnd: 600, Q: 1.2, attack: 0.3, release: 0.1 });
+    },
+    azureHowl(a, d, t) {      // it howls at the ceiling (two voices, a semitone apart)
+      a.tone(d, { wave: 'sawtooth', freq: 110, freqEnd: 180, slideTime: 0.5, t, dur: 1.4, vol: 0.12, attack: 0.1, release: 0.5, vibrato: 10, vibratoRate: 20 });
+      a.tone(d, { wave: 'sawtooth', freq: 116.5, freqEnd: 190, slideTime: 0.5, t, dur: 1.4, vol: 0.08, attack: 0.1, release: 0.5, vibrato: 12, vibratoRate: 24 });
+      a.noiseBurst(d, { t, dur: 1.4, vol: 0.12, type: 'bandpass', freq: 900, freqEnd: 400, Q: 0.8, attack: 0.15, release: 0.8 });
+    },
+    minionPop(a, d, t) { a.tone(d, { wave: 'square', freq: 260, freqEnd: 520, t, dur: 0.06, vol: 0.05, release: 0.04 }); a.noiseBurst(d, { t, dur: 0.08, vol: 0.06, type: 'bandpass', freq: 1800, Q: 1.2, release: 0.06 }); },
+    minionClaw(a, d, t) { a.noiseBurst(d, { t, dur: 0.07, vol: 0.07, type: 'bandpass', freq: 1500, freqEnd: 3800, Q: 1.3, release: 0.05 }); },
+    minionHurt(a, d, t) { a.tone(d, { wave: 'square', freq: 520, freqEnd: 300, t, dur: 0.06, vol: 0.04, release: 0.04 }); },
+    minionDie(a, d, t) { a.tone(d, { wave: 'square', freq: 420, freqEnd: 120, slideTime: 0.2, t, dur: 0.2, vol: 0.04, release: 0.06 }); a.noiseBurst(d, { t, dur: 0.15, vol: 0.06, type: 'lowpass', freq: 1600, release: 0.1 }); },
+    slowMo(a, d, t) {         // everything slows right down
+      a.tone(d, { wave: 'sine', freq: 180, freqEnd: 40, slideTime: 1.2, t, dur: 1.2, vol: 0.16, attack: 0.02, release: 0.5 });
+      a.noiseBurst(d, { t, dur: 1.0, vol: 0.1, type: 'bandpass', freq: 1200, freqEnd: 150, Q: 0.8, release: 0.6 });
+    },
+    heartbeat(a, d, t) {      // ba-dum. (slowly)
+      a.tone(d, { wave: 'sine', freq: 60, freqEnd: 40, t, dur: 0.12, vol: 0.22, release: 0.1 });
+      a.tone(d, { wave: 'sine', freq: 55, freqEnd: 38, t: t + 0.22, dur: 0.12, vol: 0.16, release: 0.12 });
+    },
+    sealBreak(a, d, t) {      // the seal on the far passage cracks and falls away
+      a.noiseBurst(d, { t, dur: 0.5, vol: 0.12, type: 'highpass', freq: 1800, release: 0.4 });
+      [1046, 1318, 1568].forEach((f, i) => a.tone(d, { wave: 'triangle', freq: f, t: t + i * 0.05, dur: 0.02, vol: 0.05, release: 0.6 }));
+      a.tone(d, { wave: 'sine', freq: 80, freqEnd: 40, t, dur: 0.5, vol: 0.16, release: 0.3 });
     },
     levelUp(a, d, t) {
       [523, 659, 784, 1046].forEach((f, i) => a.tone(d, { wave: 'pulse25', freq: f, t: t + i * 0.07, dur: 0.08, vol: 0.08, release: 0.06 }));
