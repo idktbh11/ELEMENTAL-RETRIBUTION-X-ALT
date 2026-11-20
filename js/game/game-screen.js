@@ -14,8 +14,9 @@
  *
  * Progress (character.progress.stage): new -> tutorialDone -> enemiesCleared
  *   -> deepEnds -> reachedEnd -> awakened -> worldUnlocked -> deeperEnds (fell through
- *   world 1's old cave into THE DEEPER ENDS). Returning players
- *   resume at the right place. character.element is assigned ONLY at the reveal.
+ *   world 1's old cave into THE DEEPER ENDS) -> abyss (through the floor of skulls,
+ *   past the trial, into THE ABYSS). Flags on the side: trialDone, abyssIntro.
+ *   Returning players resume at the right place. character.element is assigned ONLY at the reveal.
  */
 (function (ERX) {
   'use strict';
@@ -25,7 +26,7 @@
   const { Gate, Dummy, Bolt, Orb, Shockwave, renderDecor, drawFlame } = ERX.Props;
   const sfx = (n, o) => ERX.Audio.playSfx(n, o);
 
-  const STAGES = ['new', 'tutorialDone', 'enemiesCleared', 'deepEnds', 'reachedEnd', 'awakened', 'worldUnlocked', 'deeperEnds'];
+  const STAGES = ['new', 'tutorialDone', 'enemiesCleared', 'deepEnds', 'reachedEnd', 'awakened', 'worldUnlocked', 'deeperEnds', 'abyss'];
   const ORB_LIGHTS = ['#ff5a5a', '#ffb84a', '#ffe95a', '#6aff8a', '#5ac8ff', '#b07aff'];
   // ability effects drawn behind characters (things on the ground)
   const BACK_FX = { zone: true, vortex: true, aura: true, spikes: true, pillar: true, turret: true };
@@ -70,6 +71,7 @@
       else if (stage === 'awakened') this.loadLevel('void', { intro: true });
       else if (stage === 'worldUnlocked') this.loadLevel('void', {});
       else if (stage === 'deeperEnds') this.loadLevel('deeper', {});
+      else if (stage === 'abyss') this.loadLevel('abyss', {});
       else this.loadLevel('deep', { at: stage === 'reachedEnd' ? 'hall' : 'start' });
       ERX.Audio.setAmbience('cave');
     }
@@ -82,7 +84,7 @@
     loadLevel(id, opts = {}) {
       const seed = (Date.now() >>> 0) ^ (id === 'cave' ? 0x1234 : 0x5678);
       this.levelId = id;
-      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel, world1: ERX.World1Level, oldcave: ERX.OldCaveLevel, deeper: ERX.DeeperEndsLevel }[id] || ERX.DeepEndsLevel;
+      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel, world1: ERX.World1Level, oldcave: ERX.OldCaveLevel, deeper: ERX.DeeperEndsLevel, abyss: ERX.AbyssLevel }[id] || ERX.DeepEndsLevel;
       this.level = new Level(seed);
       this.backWall = this.level.renderBackWall ? this.level.renderBackWall() : null;
       this.frontLayer = this.level.renderFront ? this.level.renderFront() : null;
@@ -285,19 +287,45 @@
         for (const n of L.npcs) this.npcs.push(Object.assign({ talkIndex: 0, t: 0 }, n));
         // what lives down here: dark slimes, vampires, zombies, dark deepers, bats (js/game/enemies-deep.js)
         for (const s of L.enemySpawns) this.enemies.push(ERX.Enemies.create(this, s));
+        // the trial's gate (js/game/deeper-trial.js); beaten it already? then it's all open
+        this.gates.trial = L.trial.gate;
+        if (this.character.progress && this.character.progress.trialDone) L.trial.snapDone();
         ERX.Audio.setAmbience('cave');
         if (opts.fallIn) {
           p.placeAt(L.landX, L.floorY - 280);
           p.controls = false;
           ERX.Audio.playMusic(null);
-          const slime = this.npcs.find((n) => n.id === 'slime');
-          if (slime) slime.hidden = true;                 // it turns up in a minute (the story drops it in)
-          this.runScript(ERX.Story.world.deeperArrival);
+          this.runScript(ERX.Story.world.deeperArrival);   // (the slime drops in, has its say, and hops off)
         } else {
           p.placeAt(L.spawn.x, L.spawn.y);
           ERX.Audio.playMusic('deeperends');
           this.banner = { title: 'THE DEEPER ENDS', sub: 'Darker. Deeper. Weirdly groovy.', t: 0, dur: 4 };
         }
+      } else if (id === 'abyss') {
+        // THE ABYSS (js/game/level-abyss.js): the floor of skulls drops you here; or you come back to it from a save
+        const L = this.level;
+        this.stageName = 'abyss';
+        this.hudAlpha = 1;
+        this.allowDeath = true;
+        for (const n of L.npcs) this.npcs.push(Object.assign({ talkIndex: 0, t: 0 }, n));
+        ERX.Audio.setAmbience('cave');
+        ERX.Audio.playMusic(null);
+        if (opts.fallIn) {
+          p.placeAt(L.landX, L.floorY - 300);
+          p.controls = false;
+          this.runScript(ERX.Story.world.abyssArrival);
+        } else {
+          p.placeAt(L.spawn.x, L.spawn.y);
+          if (this.character.progress && this.character.progress.abyssIntro) {
+            // you've seen it already: the lights are on, the slime's waiting (the boss isn't)
+            L.lightAll();
+            L.introDone = true;
+            const s = this.npcs.find((n) => n.id === 'slime');
+            if (s) { s.hidden = false; s.x = L.slimeX; s.y = L.floorY; }
+          }
+          this.banner = { title: 'THE ABYSS', sub: 'The boss is late.', t: 0, dur: 4 };
+        }
+        this.darkness = L.darknessAt();
       } else {
         const L = this.level;
         const at = opts.at === 'hall' ? L.checkpoints[L.checkpoints.length - 1] : opts.at === 'elevator' ? { x: L.elevator.x0 - 24, y: L.elevator.floorY } : L.spawn;
@@ -1064,9 +1092,11 @@
       }
     }
 
-    /** The grumpy slime (Deeper Ends): drops in from above, hops wherever it's told (n.goX), and nobody gets past it. */
+    /** The grumpy slime (Deeper Ends, the abyss): drops in from above, hops wherever it's told (n.goX), and nobody gets past it (n.guard). */
     _updateSlime(n, dt) {
       if (n.hidden) return;
+      // leaving (it has somewhere to be): once it's out of sight, or where it was going, it's gone
+      if (n.leaving && !n.air && (n.goX == null || Math.abs(n.x - this.player.cx) > 240)) { n.hidden = true; n.leaving = false; n.goX = null; return; }
       const p = this.player, L = this.level;
       if (n.falling || n.air) {
         n.vy = (n.vy || 0) + 900 * dt;
@@ -1091,6 +1121,13 @@
       this.bolts = [];
       this.fall = new ERX.CaveFall(this);
       this.fall.onDone = (g) => ERX.Scenes.transition('fade', 0.8, () => g.loadLevel('deeper', { fallIn: true }), { silent: true });
+    }
+    /** The floor of skulls has gone and you're falling (js/game/abyss-fall.js), down into the abyss. */
+    startAbyssFall() {
+      this.enemies = [];
+      this.bolts = [];
+      this.fall = new ERX.AbyssFall(this);
+      this.fall.onDone = (g) => ERX.Scenes.transition('fade', 0.8, () => g.loadLevel('abyss', { fallIn: true }), { silent: true });
     }
 
     _updateElevator(dt) {
@@ -1178,6 +1215,13 @@
           if (K.wasPressed('use')) this.runScript((g) => (n.id === 'slime' ? ERX.Story.world.slimeTalk(g, n) : ERX.Story.deep.talk(g, n)));
           return;
         }
+      }
+      // whatever the level itself lets you do (the Deeper Ends: take the torch off the wall)
+      const it = this.level.interact ? this.level.interact(this) : null;
+      if (it) {
+        this.prompt = { x: it.x, y: it.y, text: it.text };
+        if (K.wasPressed('use')) it.act(this);
+        return;
       }
       if (this.levelId === 'world1') {
         const L = this.level;

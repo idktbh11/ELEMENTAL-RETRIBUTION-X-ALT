@@ -4,22 +4,26 @@
  *   the landing chamber (a hole in its ceiling: that's how you got here) ->
  *   the first gallery (floating ledges) -> the basin (a glowing pool) ->
  *   the second gallery -> THE CAVERN HALL (ledges climbing up in front of a
- *   great waterfall) -> the grumpy slime, guarding the bit that isn't
- *   finished. Again.
+ *   great waterfall) -> the far chamber -> a tunnel -> THE TRIAL (six waves,
+ *   then its great door opens) -> THE DARK (a pitch-black corridor: take the
+ *   torch by the door. Its floor is skulls. Then it isn't a floor any more.)
  *
  * A mystical dark cave: black rock underfoot; floating slabs of dark stone
  * with crystals on top and crystals hanging under them; great crystal
  * formations along the back; and far behind, in the dark, more caves, with
  * stalactites, twinkling crystals and glowing waterfalls (see Cavern).
  * Monsters: dark slimes, vampires, zombies, dark deepers and bats
- * (js/game/enemies-deep.js). Built with the cave's tools (it extends
- * CaveLevel). The story for it is in story-world.js.
+ * (js/game/enemies-deep.js). The trial, the torch and the bones are run by
+ * js/game/deeper-trial.js. Built with the cave's tools (it extends CaveLevel).
+ * The story for it is in story-world.js.
  *
  *   level.drawSky()     the caves far behind (the game screen calls it)
- *   level.drawLive()    motes of light drifting about
- *   level.drawFog()     the pool in the basin (over you: you wade through it)
- *   level.liveLights()  the monsters' glow, the waterfalls' light
- *   level.update()      splashes
+ *   level.drawLive()    motes of light, the trial's portals and door, the bones
+ *   level.drawFog()     over you: the pool, the bones at your feet, the black past the door, your torch
+ *   level.liveLights()  the monsters' glow, the waterfalls' light, the portals, your torch
+ *   level.update()      splashes, the trial, the dark corridor
+ *   level.interact()    take the torch
+ *   level.collapse()    the floor of skulls gives way (the story calls it)
  */
 (function (ERX) {
   'use strict';
@@ -59,9 +63,17 @@
     [97, 101, 21], [101, 106, 18], [107, 112, 15], [116, 121, 17], [124, 127, 20],
     // the cavern hall: up and up, to a perch right in front of the great waterfall
     [133, 137, 21], [137, 142, 18], [143, 148, 15], [149, 153, 12], [157, 161, 16], [164, 167, 20],
+    // the trial: a pyramid of slabs to fight from
+    [216, 221, 21], [221, 225, 18], [226, 238, 15], [239, 243, 18], [243, 248, 21],
   ];
   // the pool in the basin (tiles): water from x0 to x1, this deep (px) over the floor
   const POOL = { x0: 70, x1: 92, floor: FLOOR + 3, depth: 7 };
+  // THE TRIAL (js/game/deeper-trial.js runs it): a gate in the doorway behind you, the arena
+  // (tiles [x0, x1)), the great door in its far wall, the torch on the wall by the door
+  const TRIAL = { gateTx: 212, gateRows: [21, 23], x0: 213, x1: 252, doorTx: 252, doorRows: [20, 23], torchTx: 249 };
+  // THE DARK: the corridor past the door. Its floor is bones from bonesFrom on; the floor gives way
+  // between holeX0 and holeX1 once you're past triggerX (tiles)
+  const CORR = { x0: 252, x1: 326, top: 20, bonesFrom: 262, triggerX: 300, holeX0: 294, holeX1: 310 };
 
   // ------------------------------------------------------------ the caves, far behind
   /**
@@ -295,7 +307,7 @@
   // ------------------------------------------------------------ the Deeper Ends
   class DeeperEndsLevel extends ERX.CaveLevel {
     configure() {
-      this.W = 200;
+      this.W = 330;
       this.H = 30;
       this.pal = PAL;
       this.sections = [];
@@ -314,10 +326,15 @@
       this.plat(70, 73, FLOOR + 1); this.plat(88, 91, FLOOR + 1);   // ...with a step down at each side
       this.air(92, 130, 7, FLOOR);          // the second gallery
       this.air(130, 170, 3, FLOOR);         // THE CAVERN HALL: tall, the great waterfall behind it
-      this.air(170, 196, 8, FLOOR);         // the end chamber (the slime's post)
+      this.air(170, 200, 8, FLOOR);         // the far chamber
+      this.air(200, 210, 14, FLOOR);        // a tunnel...
+      this.air(210, TRIAL.x0, TRIAL.gateRows[0], FLOOR);     // ...a low doorway (the gate comes up out of its floor)...
+      this.air(TRIAL.x0, TRIAL.x1, 6, FLOOR);                // ...THE TRIAL
+      this.air(CORR.x0, CORR.x1, CORR.top, FLOOR);          // past its door: the dark corridor
       const noise = new U.Noise(this.seed ^ 0x55);
-      for (let x = 4; x < 196; x++) {
-        if (x >= 13 && x <= 19) continue;   // leave the hole above the landing alone
+      const smooth = (x) => (x >= 13 && x <= 19) || (x >= 208 && x <= TRIAL.x0) || x >= TRIAL.x1 - 1;   // the hole over the landing, the doorway, the door and the corridor
+      for (let x = 4; x < this.W - 2; x++) {
+        if (smooth(x)) continue;
         let top = 0;
         for (let y = 1; y < this.H; y++) if (this.tile(x, y) === 0) { top = y; break; }
         if (!top) continue;
@@ -331,8 +348,8 @@
       this.floorY = FLOOR * TS;
       this.landX = 16.5 * TS;               // right under the hole
       this.spawn = { x: 22 * TS, y: FLOOR * TS };
-      this.checkpoints = [this.spawn, ...[68, 94, 132, 172].map((x) => ({ x: x * TS, y: FLOOR * TS }))];
-      this.slimeX = 182 * TS;               // where the grumpy slime stands guard
+      this.checkpoints = [this.spawn, ...[68, 94, 132, 172, 206].map((x) => ({ x: x * TS, y: FLOOR * TS }))];   // (+ one by the door, once the trial's done)
+      this.slimeExitX = 205 * TS;           // where the grumpy slime hops off to (it has somewhere to be)
 
       // ---- crystals, torches ----
       this.decor = [];
@@ -353,11 +370,13 @@
         const t = { x: tx * TS + 8, y: ground(tx) - 3 * TS + 4, phase: rng.range(0, 10), lit: true };
         this.torches.push(t);
         this.lights.push({ x: t.x, y: t.y, r: 64, color: '#ffb050', flicker: true, ref: t });
+        return t;
       };
       let n = 0;
-      for (let tx = 5; tx < 195; tx += rng.int(2, 5)) {
+      for (let tx = 5; tx < TRIAL.x1 - 2; tx += rng.int(2, 5)) {
         if (tx >= 13 && tx <= 20) continue;  // keep the landing spot clear
         if (tx >= POOL.x0 && tx < POOL.x1) continue;   // nothing grows in the pool
+        if (tx >= 208 && tx <= TRIAL.x0 + 1) continue; // or in the doorway
         crystal(tx * TS + rng.int(2, 12), ground(tx), n++ % 3 === 0);
       }
       // dark crystals on every floating ledge (and hanging under it: renderBackWall)
@@ -370,26 +389,33 @@
       }
       // great crystal formations growing up the back of the cave (not under the low ledges)
       this.formations = [];
-      for (const tx of [25, 44, 56, 84, 106, 121, 143, 152, 162, 188]) {
+      for (const tx of [25, 44, 56, 84, 106, 121, 143, 152, 162, 188, 203, 232]) {
         const c = rng.pick(CRYSTALS), f = { x: tx * TS + rng.int(0, 12), y: ground(tx), h: rng.int(26, 44), c, n: rng.int(4, 7) };
         this.formations.push(f);
         this.lights.push({ x: f.x, y: f.y - f.h * 0.5, r: 70, color: c.glow, pulse: true });
       }
-      [9, 27, 49, 69, 79, 94, 112, 130, 141, 156, 170, 178, 192].forEach(torch);
-      for (let x = 4; x < 196; x++) {
+      [9, 27, 49, 69, 79, 94, 112, 130, 141, 156, 170, 178, 192, 204, 215, 231].forEach(torch);
+      for (let x = 4; x < TRIAL.x1; x++) {
         if (x >= 13 && x <= 19) continue;
         if (!rng.chance(0.2)) continue;
         const cy = this._ceilAbove(x, FLOOR - 1);
-        if (cy > 0) this.decor.push({ kind: 'stalactite', x: x * TS + rng.int(2, 13), y: (cy + 1) * TS, len: rng.int(5, 16), w: rng.int(3, 6) });
+        if (cy > 0 && cy < TRIAL.gateRows[0] - 1) this.decor.push({ kind: 'stalactite', x: x * TS + rng.int(2, 13), y: (cy + 1) * TS, len: rng.int(5, 16), w: rng.int(3, 6) });
       }
       const sign = (tx, text) => this.signs.push({ x: tx * TS + 8, y: ground(tx), text, read: false });
-      sign(177, 'THE DEEPER ENDS\nCLOSED FOR CONSTRUCTION.\n(Ask the slime. Do NOT ask the slime.)');
+      sign(207, 'THE TRIAL\nSix waves. No reward.\n(No XP. No gold. Just bragging rights.)');
 
-      // the grumpy slime, at its post (the story drops it in first, when you fall in)
-      this.npcs.push({ id: 'slime', name: 'GRUMPY SLIME', x: this.slimeX, y: this.floorY, facing: -1, guard: true });
+      // ---- the last stretch: the trial, its door, the torch, the bones (js/game/deeper-trial.js) ----
+      const T = ERX.DeeperTrial;
+      this.trial = new T.Trial(this, TRIAL);
+      this.torch = new T.Torch(this, torch(TRIAL.torchTx));      // the torch on the wall by the door: take it
+      this.bones = new T.Bones(CORR.bonesFrom * TS, CORR.x1 * TS - 10, this.floorY, this.seed ^ 0xb0e5);
+      this.dark = { collapsed: false };
+
+      // the grumpy slime: only here when you fall in (it drops in, has its say, and hops off: it has somewhere to be)
+      this.npcs.push({ id: 'slime', name: 'GRUMPY SLIME', x: this.landX + 64, y: this.floorY, facing: -1, hidden: true });
 
       // motes of light drifting about the cave (drawLive)
-      this.motes = Array.from({ length: 70 }, () => ({ x: rng.range(4, 196) * TS, y: rng.range(8, FLOOR - 1) * TS, ph: rng.range(0, 6), sp: rng.range(0.3, 0.9), c: rng.pick(CRYSTALS).glow }));
+      this.motes = Array.from({ length: 96 }, () => ({ x: rng.range(4, TRIAL.x1 - 1) * TS, y: rng.range(8, FLOOR - 1) * TS, ph: rng.range(0, 6), sp: rng.range(0.3, 0.9), c: rng.pick(CRYSTALS).glow }));
 
       // ---- what lives down here (js/game/enemies-deep.js) ----
       this.enemySpawns = [
@@ -404,8 +430,8 @@
       ];
     }
 
-    /** Dark: the crystals, the torches and the waterfalls are the light. */
-    darknessAt() { return 0.58; }
+    /** Dark: the crystals, the torches and the waterfalls are the light. Past the trial's door: pitch black. */
+    darknessAt(px) { return px > (CORR.x0 + 1.5) * TS ? 0.985 : 0.58; }
 
     /** Platforms down here are slabs of dark stone (the cave draws them as planks). */
     renderTiles() {
@@ -468,6 +494,31 @@
           }
         }
       }
+      // a few skulls piled in the trial's corners (a hint of what's coming)
+      const art = ERX.DeeperTrial.boneArt;
+      for (const [x, n] of [[(TRIAL.x0 + 0.4) * TS, 3], [(TRIAL.x1 - 1.4) * TS, 4]]) for (let i = 0; i < n; i++) b.blit(art(i % 3 === 2 ? 'bone' : 'skull'), Math.round(x + (i % 2) * 6 - 4), this.floorY - 9 - (i > 1 ? 5 : 0));
+      // the dark corridor: catacomb walls, shelves cut into the stone with the dead laid out on them
+      const cx0 = (CORR.x0 + 2) * TS, cx1 = CORR.x1 * TS, cy0 = CORR.top * TS, cy1 = FLOOR * TS;
+      const STONE = ['#2a2236', '#1e1828', '#16121e', '#0a080e'].map(c32);
+      const hash = (a, b2) => { const s = Math.sin(a * 127.1 + b2 * 311.7) * 43758.5453; return s - Math.floor(s); };
+      for (let y = cy0; y < cy1; y++) {
+        const row = Math.floor((y - cy0) / 10), by = (y - cy0) % 10;
+        for (let x = cx0; x < cx1; x++) {
+          const ox = x - cx0 + (row % 2) * 12, bx = ox % 24, block = hash(Math.floor(ox / 24), row);
+          b.set(x, y, bx === 0 || by === 0 ? STONE[3] : by > 7 ? STONE[2] : block > 0.75 ? STONE[0] : STONE[1]);
+        }
+      }
+      for (let x = cx0 + rng.int(4, 18); x < cx1 - 44; x += rng.int(40, 64)) {
+        const w = 36, h = 10, y = cy0 + rng.int(12, 22);
+        for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) b.set(x + xx, y + yy, c32(yy < 2 ? '#020103' : '#06050a'));
+        if (rng.chance(0.6)) b.blit(art('skeleton'), x + 1, y + h - 8);          // one of them laid out on the shelf...
+        else for (let sx = x + 1; sx < x + w - 8; sx += 8) b.blit(art('skull'), sx, y + h - 9);   // ...or a row of skulls
+      }
+      for (let x = cx0 + rng.int(20, 40); x < cx1 - 20; x += rng.int(30, 56)) {
+        const y = cy0 + rng.int(2, 8);                                            // little skull niches, up high
+        for (let yy = 0; yy < 10; yy++) for (let xx = 0; xx < 11; xx++) b.set(x + xx, y + yy, c32('#06050a'));
+        b.blit(art(rng.chance(0.75) ? 'skull' : 'skullSide'), x + 1, y + 1);
+      }
       b.outline(c32(PAL.outline));
       return b.toCanvas();
     }
@@ -478,7 +529,7 @@
       this.cavern.draw(ctx, cam, vw, vh, g.t);
     }
 
-    /** Motes of light drifting about the cave, behind you and the monsters. */
+    /** Behind you and the monsters: motes of light drifting about, the trial's portals and door, the bones. */
     drawLive(ctx, cam, g) {
       const t = g.t, vw = g.view.width, vh = g.view.height;
       for (const m of this.motes) {
@@ -489,10 +540,28 @@
         ctx.globalAlpha = a; ctx.fillStyle = '#f0e8ff'; ctx.fillRect(x, y, 1, 1);
       }
       ctx.globalAlpha = 1;
+      const view = { ix: cam.ix, iy: cam.iy, vw };
+      this.trial.drawPortals(ctx, view);
+      this.bones.draw(ctx, view, false);
+      this.trial.drawDoor(ctx, view, t);
+    }
+
+    /** Over you: the pool, the bones at your feet, the black past the trial's door, the torch in your hand. */
+    drawFog(ctx, cam, vw, vh, g) {
+      const view = { ix: cam.ix, iy: cam.iy, vw };
+      this.drawPool(ctx, cam, vw, vh, g);
+      this.bones.draw(ctx, view, true);
+      // past the door: black, unless you're in there (then it's the dark itself: darknessAt, and your torch)
+      const x0 = (TRIAL.doorTx + 2) * TS, k = U.clamp((x0 + 8 - g.player.cx) / 40, 0, 1);
+      if (k > 0) {
+        const sx = Math.max(0, x0 - cam.ix), top = CORR.top * TS - cam.iy, h = (FLOOR - CORR.top) * TS + 2;
+        if (sx < vw) { ctx.fillStyle = 'rgba(2,1,4,' + (0.97 * k).toFixed(3) + ')'; ctx.fillRect(sx, top, vw - sx, h); }
+      }
+      this.torch.draw(ctx, cam, g);
     }
 
     /** The pool in the basin: glowing water you wade through (drawn over you). */
-    drawFog(ctx, cam, vw, vh, g) {
+    drawPool(ctx, cam, vw, vh, g) {
       const P = this.pool, t = g.t, x0 = P.x0 - cam.ix, x1 = P.x1 - cam.ix, y = P.y - cam.iy;
       if (x1 < 0 || x0 > vw || y > vh || y + POOL.depth < 0) return;
       ctx.globalAlpha = 0.5; ctx.fillStyle = '#0e4a66'; ctx.fillRect(x0, y + 1, x1 - x0, POOL.depth - 1);
@@ -511,8 +580,8 @@
       ctx.globalAlpha = 1;
     }
 
-    /** A splash when you jump into the pool, and when you wade through it. */
     update(dt, g) {
+      // the pool: a splash when you jump in, and when you wade through it
       const P = this.pool, p = g.player;
       const wet = p.cx > P.x0 && p.cx < P.x1 && p.feet > P.y + 1;
       if (wet && !this._wet && p.vy > 40) {
@@ -522,18 +591,70 @@
       if (wet && Math.abs(p.vx) > 30 && Math.random() < dt * 12) g.fx.add({ x: p.cx - Math.sign(p.vx) * 4, y: P.y, vx: -p.vx * 0.2, vy: U.lerp(-80, -30, Math.random()), ay: 500, life: 0.3, color: '#9af0ff', size: 1, fadeOut: 0.15 });
       if (wet && Math.abs(p.vx) > 30) sfx('waterWade', { minGap: 0.32 });
       this._wet = wet;
+      // the trial, then the dark
+      this.trial.update(dt, g);
+      this.updateDark(dt, g);
     }
 
-    /** The monsters' glow, and the waterfalls' and far crystals' light (wherever they are on screen). */
+    /** The dark corridor: you won't go in without a light; the floor is skulls; far along, it gives way. */
+    updateDark(dt, g) {
+      const D = this.dark, p = g.player, B = this.bones;
+      B.update(dt);
+      if (g.state !== 'play') return;
+      if (!this.torch.held && p.cx > (CORR.x0 + 4) * TS) {
+        p.x = (CORR.x0 + 4) * TS - p.w / 2;   // (the TAKE THE TORCH objective says why)
+        if (p.vx > 0) p.vx = 0;
+      }
+      if (!D.collapsed && p.onGround && Math.abs(p.vx) > 25 && p.cx > B.x0 && p.cx < B.x1) sfx('boneStep', { minGap: 0.21 });   // crunch. crunch.
+      if (g.script || D.collapsed) return;
+      if (p.cx > CORR.triggerX * TS && p.onGround) { D.collapsed = true; g.runScript(ERX.Story.world.skullCollapse); }
+    }
+
+    /** The floor of skulls gives way under you: a hole right through, and everything on it goes down. */
+    collapse(g) {
+      const a = CORR.holeX0, b = CORR.holeX1, y0 = FLOOR * TS, h = this.ph - y0;
+      for (let tx = a; tx < b; tx++) for (let ty = FLOOR; ty < this.H; ty++) this.setTile(tx, ty, 0);
+      const tiles = g.tilesCanvas || this._tl;
+      if (tiles) {
+        // cut the hole out of the drawn floor (redrawing the whole level here would hitch)
+        const c = tiles.getContext('2d');
+        c.clearRect(a * TS, y0, (b - a) * TS, h);
+        c.fillStyle = PAL.outline; c.fillRect(a * TS - 1, y0, 1, h); c.fillRect(b * TS, y0, 1, h);
+      }
+      this.bones.shake = 0;
+      this.bones.collapse(a * TS - 2, b * TS + 2);
+      for (let i = 0; i < 46; i++) {
+        g.fx.add({
+          x: U.lerp(a * TS, b * TS, Math.random()), y: this.floorY + U.lerp(-2, 10, Math.random()), vx: U.lerp(-40, 40, Math.random()), vy: U.lerp(-120, 40, Math.random()), ay: 700,
+          life: U.lerp(0.6, 1.2, Math.random()), color: Math.random() < 0.5 ? PAL.rock[1 + Math.floor(Math.random() * 3)] : '#c8bc9a', size: Math.random() < 0.5 ? 2 : 1, fadeOut: 0.2,
+        });
+      }
+      sfx('boneCollapse');
+      g.shake(6, 0.6);
+    }
+
+    /** Things you can do here with {use}: take the torch off the wall, once the door's open. */
+    interact(g) {
+      const T = this.torch;
+      if (!T.canTake(this.trial, g.player)) return null;
+      return { x: T.wall.x, y: T.wall.y - 10, text: '{use} TAKE THE TORCH', act: (gg) => { T.take(gg); gg.completeObjective(); } };
+    }
+
+    /** The monsters' glow, the waterfalls' light (wherever they are on screen), the portals, the runes, your torch. */
     liveLights(g) {
       const out = [];
       if (g && g.enemies) for (const e of g.enemies) { const l = e.light && !e.dead ? e.light() : null; if (l) out.push(l); }
       if (this.cavern && g && g.camera) for (const l of this.cavern.lights(g.camera)) out.push(l);
+      this.trial.lights(out);
+      const tl = g && g.player ? this.torch.light(g) : null;
+      if (tl) out.push(tl);
       return out;
     }
   }
 
   DeeperEndsLevel.LEDGES = LEDGES;
   DeeperEndsLevel.POOL = POOL;
+  DeeperEndsLevel.TRIAL = TRIAL;
+  DeeperEndsLevel.CORR = CORR;
   ERX.DeeperEndsLevel = DeeperEndsLevel;
 })(window.ERX = window.ERX || {});

@@ -1316,6 +1316,8 @@
       // carrying Chaos? The monsters push back harder (js/game/chaos-world.js)
       const d = ERX.ChaosWorld && spawn.type !== 'dummy' ? ERX.ChaosWorld.difficulty(game) : null;
       if (d && d.hp !== 1) { e.maxHp = Math.round(e.maxHp * d.hp); e.hp = e.maxHp; if (e.damage) e.damage = Math.round(e.damage * d.damage); }
+      // spawn.noReward: worth nothing when it dies, no XP and no gold (the Deeper Ends' trial waves)
+      if (spawn.noReward) { e.noReward = true; e.xp = 0; e.gold = 0; }
       return e;
     },
   };

@@ -162,15 +162,17 @@
     }
 
     // ---- boss warning + fake boss bar ----
+    // g.warning: true (the tutorial's red one), or { title, text, style: 'abyss' } (the abyss: dark purple)
     if (g.warning) {
-      const flash = Math.floor(g.t * 5) % 2 === 0;
-      T.rect(ctx, 0, Math.round(H * 0.18), W, 22, flash ? 'rgba(180,20,30,0.75)' : 'rgba(90,10,20,0.75)');
+      const w = typeof g.warning === 'object' ? g.warning : {}, abyss = w.style === 'abyss';
+      const flash = Math.floor(g.t * 5) % 2 === 0, ink = abyss ? '#14042a' : '#3a0008', stripe = abyss ? '#d8a8ff' : '#ffd34d';
+      T.rect(ctx, 0, Math.round(H * 0.18), W, 22, abyss ? (flash ? 'rgba(110,24,170,0.8)' : 'rgba(46,8,84,0.8)') : (flash ? 'rgba(180,20,30,0.75)' : 'rgba(90,10,20,0.75)'));
       for (let sx = -20 + Math.floor(g.t * 40) % 20; sx < W; sx += 20) {
-        T.rect(ctx, sx, Math.round(H * 0.18), 10, 2, '#ffd34d');
-        T.rect(ctx, sx + 10, Math.round(H * 0.18) + 20, 10, 2, '#ffd34d');
+        T.rect(ctx, sx, Math.round(H * 0.18), 10, 2, stripe);
+        T.rect(ctx, sx + 10, Math.round(H * 0.18) + 20, 10, 2, stripe);
       }
-      F.draw(ctx, '!! WARNING !!', W / 2, Math.round(H * 0.18) + 3, { scale: 1, color: '#ffffff', outline: '#3a0008', align: 'center' });
-      F.draw(ctx, 'A TERRIFYING FOE APPROACHES', W / 2, Math.round(H * 0.18) + 12, { color: '#ffd0d0', outline: '#3a0008', align: 'center' });
+      F.draw(ctx, w.title || '!! WARNING !!', W / 2, Math.round(H * 0.18) + 3, { scale: 1, color: '#ffffff', outline: ink, align: 'center' });
+      F.draw(ctx, w.text || 'A TERRIFYING FOE APPROACHES', W / 2, Math.round(H * 0.18) + 12, { color: abyss ? '#ecd4ff' : '#ffd0d0', outline: ink, align: 'center' });
     }
     if (g.bossBar) {
       const bw = Math.min(W - 60, 220), bx = Math.round(W / 2 - bw / 2), by = H - 30;

@@ -84,7 +84,7 @@
       if (this.mini) return;
       sfx('darkSlimeSplit');
       for (const side of [-1, 1]) {
-        const m = E.create(this.game, { type: 'darkSlime', variant: 'mini', x: this.cx + side * 5, y: this.y + this.h });
+        const m = E.create(this.game, { type: 'darkSlime', variant: 'mini', x: this.cx + side * 5, y: this.y + this.h, zone: this.zone, noReward: this.noReward });
         m.vx = side * 70; m.vy = -170; m.onGround = false; m.hopT = 0.7;
         this.game.enemies.push(m);
       }

@@ -85,6 +85,36 @@
     },
   });
 
+  // A dark choir for the abyss: two detuned saws swelling in, a hum an octave down under them.
+  V.choir = (a, d, f, t, dur, tr) => {
+    const v = tr.lead.vol, len = Math.min(dur * 0.95, 1.8);
+    a.tone(d, { wave: 'sawtooth', freq: f, t, dur: len, vol: v * 0.5, attack: 0.09, release: 0.3, vibrato: f * 0.012, vibratoRate: 5.2, vibratoDelay: 0.12 });
+    a.tone(d, { wave: 'sawtooth', freq: f * 1.007, t, dur: len, vol: v * 0.38, attack: 0.12, release: 0.3, vibrato: f * 0.01, vibratoRate: 4.3, vibratoDelay: 0.12 });
+    a.tone(d, { wave: 'triangle', freq: f / 2, t, dur: len, vol: v * 0.55, attack: 0.06, release: 0.35 });
+  };
+
+  Object.assign(ERX.MusicTracks, {
+    // THE ABYSS: a boss is coming. Built on the tutorial's 'boss' (An Ominous Rumble): the same
+    // tempo, the same i-i-VI-V shape, the same galloping bass, beat, arpeggio and stabs, but a key
+    // lower (C# minor, darker), a slow dark choir chanting over it, and a timpani BOOM on every one.
+    abyssboss: {
+      title: 'It Comes From Below',
+      bpm: 150, stepsPerBar: 16, swing: 0, restEvery: 0, fadeIn: 0.3,
+      chords: 'C#m C#m A G# C#m C#m A G#',
+      lead: {
+        inst: 'choir', vol: 0.038, res: 4,
+        notes:
+          'C#5 - - - | E5 - D#5 - | C#5 - - - | C5 - D#5 - | ' +
+          'G#5 - - - | E5 - F#5 - | E5 - C#5 - | C5 - - -',
+      },
+      bass: { octave: 2, vol: 0.2, pattern: 'R R 8 R R R 8 R R R 8 R R 8 R 8' },
+      stab: { octave: 4, vol: 0.02, pattern: 'x . . . . . . . x . . . . . x .' },
+      arp: { octave: 5, vol: 0.016, pattern: [0, 1, 2, 1, 0, 1, 2, 3, 0, 1, 2, 1, 3, 2, 1, 0] },
+      pad: { octave: 2, vol: 0.02, inst: 'drone' },
+      drums: { vol: 0.9, pattern: 'bk . h . kc . h . k k h . kc . h h' },
+    },
+  });
+
   // A glassy crystal lead for the Deeper Ends: a sine body, a bright ping on top, and an echo off the cave walls.
   V.crystal = (a, d, f, t, dur, tr) => {
     const v = tr.lead.vol;
@@ -402,6 +432,70 @@
     waterWade(a, d, t) {
       a.noiseBurst(d, { t, dur: 0.1, vol: 0.035, type: 'bandpass', freq: rand(800, 1200), Q: 1.1, release: 0.08 });
       a.tone(d, { wave: 'sine', freq: rand(700, 900), freqEnd: rand(1000, 1300), t, dur: 0.04, vol: 0.015, release: 0.03 });
+    },
+    // ---- the Trial, the dark corridor, the bones, the abyss ----
+    trialHorn(a, d, t) {      // a great horn in the dark: the trial begins
+      a.tone(d, { wave: 'sawtooth', freq: 73, freqEnd: 70, t, dur: 1.4, vol: 0.06, attack: 0.25, release: 0.5, vibrato: 1.5, vibratoRate: 4 });
+      a.tone(d, { wave: 'sawtooth', freq: 110, freqEnd: 104, t: t + 0.05, dur: 1.3, vol: 0.04, attack: 0.3, release: 0.5, vibrato: 2, vibratoRate: 4.5 });
+      a.tone(d, { wave: 'sine', freq: 36.7, t, dur: 1.5, vol: 0.12, attack: 0.2, release: 0.6 });
+    },
+    trialWave(a, d, t) {      // a deep gong: here they come
+      a.tone(d, { wave: 'sine', freq: 98, freqEnd: 92, t, dur: 0.05, vol: 0.16, attack: 0.002, release: 1.4 });
+      a.tone(d, { wave: 'sine', freq: 263, t, dur: 0.05, vol: 0.05, attack: 0.002, release: 1.0 });
+      a.tone(d, { wave: 'sine', freq: 415, t, dur: 0.05, vol: 0.03, attack: 0.002, release: 0.8 });
+      a.noiseBurst(d, { t, dur: 0.08, vol: 0.05, type: 'lowpass', freq: 800, release: 0.1 });
+    },
+    portalOpen(a, d, t) {     // a purple vortex tears open...
+      a.noiseBurst(d, { t, dur: 0.6, vol: 0.05, type: 'bandpass', freq: 300, freqEnd: 1600, Q: 2, attack: 0.3, release: 0.15 });
+      a.tone(d, { wave: 'sine', freq: 140, freqEnd: 280, slideTime: 0.6, t, dur: 0.6, vol: 0.04, attack: 0.2, release: 0.1, vibrato: 12, vibratoRate: 14 });
+    },
+    portalPop(a, d, t) {      // ...and something steps out of it
+      a.tone(d, { wave: 'sine', freq: 240, freqEnd: 70, slideTime: 0.18, t, dur: 0.18, vol: 0.12, release: 0.08 });
+      a.noiseBurst(d, { t, dur: 0.12, vol: 0.07, type: 'lowpass', freq: 1500, freqEnd: 300, release: 0.1 });
+    },
+    runeLight(a, d, t) {      // a rune on the great door lights up
+      [1318.5, 1975.5, 2637].forEach((f, i) => a.tone(d, { wave: i ? 'sine' : 'triangle', freq: f, t: t + i * 0.06, dur: 0.02, vol: 0.05 / (i + 1), attack: 0.002, release: 0.9 }));
+      a.tone(d, { wave: 'sine', freq: 110, t, dur: 0.4, vol: 0.06, attack: 0.01, release: 0.4 });
+    },
+    doorGrind(a, d, t) {      // the great door grinds up into the rock
+      a.noiseBurst(d, { t, dur: 2.6, vol: 0.1, type: 'lowpass', freq: 260, freqEnd: 420, attack: 0.3, release: 0.4 });
+      a.noiseBurst(d, { t, dur: 2.5, vol: 0.03, type: 'bandpass', freq: 1200, Q: 3, attack: 0.3, release: 0.3 });
+      a.tone(d, { wave: 'sawtooth', freq: 41, freqEnd: 46, slideTime: 2.5, t, dur: 2.5, vol: 0.05, attack: 0.3, release: 0.4, vibrato: 3, vibratoRate: 9 });
+    },
+    doorBoom(a, d, t) {
+      a.tone(d, { wave: 'sine', freq: 80, freqEnd: 38, t, dur: 0.35, vol: 0.2, release: 0.25 });
+      a.noiseBurst(d, { t, dur: 0.25, vol: 0.1, type: 'lowpass', freq: 600, release: 0.2 });
+    },
+    torchGrab(a, d, t) {      // the torch comes off the wall: a whoosh of flame
+      a.noiseBurst(d, { t, dur: 0.3, vol: 0.08, type: 'bandpass', freq: 500, freqEnd: 1800, Q: 0.8, attack: 0.02, release: 0.2 });
+      for (let i = 0; i < 4; i++) a.noiseBurst(d, { t: t + 0.1 + i * 0.07, dur: 0.01, vol: 0.05, type: 'highpass', freq: 3000, release: 0.02 });
+      a.tone(d, { wave: 'square', freq: 220, freqEnd: 330, t, dur: 0.06, vol: 0.02, release: 0.04 });
+    },
+    boneStep(a, d, t) {       // walking on skulls. crunch. clack.
+      const f = rand(1800, 3200);
+      a.noiseBurst(d, { t, dur: 0.015, vol: 0.06, type: 'bandpass', freq: f, Q: 3, release: 0.02 });
+      a.noiseBurst(d, { t: t + rand(0.02, 0.05), dur: 0.012, vol: 0.04, type: 'bandpass', freq: f * 0.7, Q: 3, release: 0.02 });
+      a.tone(d, { wave: 'square', freq: rand(500, 800), freqEnd: rand(300, 400), t, dur: 0.02, vol: 0.015, release: 0.015 });
+    },
+    skullRattle(a, d, t) {    // every skull in the corridor starts to rattle
+      for (let i = 0; i < 26; i++) a.noiseBurst(d, { t: t + i * 0.06 + rand(0, 0.04), dur: 0.012, vol: 0.05, type: 'bandpass', freq: rand(1500, 3500), Q: 3, release: 0.02, pan: rand(-0.5, 0.5) });
+      a.tone(d, { wave: 'sine', freq: 50, freqEnd: 40, t, dur: 1.6, vol: 0.1, attack: 0.3, release: 0.3, vibrato: 4, vibratoRate: 10 });
+    },
+    boneCollapse(a, d, t) {   // ...and down they all go
+      a.noiseBurst(d, { t, dur: 0.9, vol: 0.16, type: 'lowpass', freq: 1400, freqEnd: 200, release: 0.6 });
+      a.tone(d, { wave: 'sine', freq: 120, freqEnd: 30, slideTime: 0.8, t, dur: 0.8, vol: 0.2, release: 0.4 });
+      for (let i = 0; i < 30; i++) a.noiseBurst(d, { t: t + rand(0, 1.2), dur: 0.012, vol: 0.05, type: 'bandpass', freq: rand(1500, 3800), Q: 3, release: 0.02, pan: rand(-0.6, 0.6) });
+    },
+    lightsOn(a, d, t) {       // CLUNK: a great purple light comes on
+      a.tone(d, { wave: 'sine', freq: 95, freqEnd: 42, t, dur: 0.22, vol: 0.2, release: 0.15 });
+      a.noiseBurst(d, { t, dur: 0.08, vol: 0.12, type: 'lowpass', freq: 1800, release: 0.08 });
+      a.tone(d, { wave: 'sawtooth', freq: 55, freqEnd: 110, slideTime: 0.35, t: t + 0.03, dur: 0.6, vol: 0.03, attack: 0.05, release: 0.4, vibrato: 3, vibratoRate: 30 });
+    },
+    slimeWhistle(a, d, t) {   // something falling from very high up (a slide whistle, obviously)
+      a.tone(d, { wave: 'sine', freq: 1900, freqEnd: 380, slideTime: 1.1, t, dur: 1.1, vol: 0.05, attack: 0.05, release: 0.08, vibrato: 18, vibratoRate: 7 });
+    },
+    lavaBubble(a, d, t) {     // the black lava, far below: blorp
+      a.tone(d, { wave: 'sine', freq: rand(60, 90), freqEnd: rand(110, 150), slideTime: 0.12, t, dur: 0.14, vol: 0.05, attack: 0.02, release: 0.1 });
     },
     levelUp(a, d, t) {
       [523, 659, 784, 1046].forEach((f, i) => a.tone(d, { wave: 'pulse25', freq: f, t: t + i * 0.07, dur: 0.08, vol: 0.08, release: 0.06 }));

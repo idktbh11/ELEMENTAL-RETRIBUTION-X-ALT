@@ -163,6 +163,10 @@
       case 'x':
         a.noiseBurst(d, { t, dur: 0.05, vol: 0.045 * vol, type: 'bandpass', freq: 6500, Q: 1.5, attack: 0.015, release: 0.05 });
         break;
+      case 'b': // a huge boom (a timpani hit in a cave)
+        a.tone(d, { wave: 'sine', freq: 78, freqEnd: 36, slideTime: 0.6, t, dur: 0.6, vol: 0.65 * vol, attack: 0.003, release: 0.4 });
+        a.noiseBurst(d, { t, dur: 0.35, vol: 0.1 * vol, type: 'lowpass', freq: 420, release: 0.35 });
+        break;
     }
   }
 

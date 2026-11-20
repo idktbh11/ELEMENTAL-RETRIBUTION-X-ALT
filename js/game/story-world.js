@@ -8,7 +8,10 @@
  *   you recall to the void. Far to the east, past the fog, you can smash your
  *   way into the old cave... where something behind bars tells you to LEAVE,
  *   the floor gives way (js/game/cave-fall.js), and you land in THE DEEPER
- *   ENDS, where guess who turns up again.
+ *   ENDS, where guess who turns up again. Far in: THE TRIAL (six waves, then
+ *   a great door), a pitch-black corridor (take the torch), a floor of skulls
+ *   that gives way (js/game/abyss-fall.js)... and THE ABYSS, where the lights
+ *   slam on and a boss is approaching. Or would be. If it were finished.
  */
 (function (ERX) {
   'use strict';
@@ -269,30 +272,174 @@
       s.angry = true;
       yield* say(g, SLIME(), 'Something told you to LEAVE, and you went DOWN instead. Unbelievable.', { effect: 'shake' });
       s.angry = false;
-      yield* say(g, SLIME(), "This is the Deeper Ends. It's deeper. It's darker. And it is NOT finished.");
-      yield* say(g, SLIME(), "So I'm guarding it. Again. Look around if you must. Don't touch the crystals. They hum.");
+      yield* say(g, SLIME(), "This is the Deeper Ends. It's deeper. It's darker. And the very bottom of it is NOT finished.");
+      yield* say(g, SLIME(), "Look around if you must. Don't touch the crystals. They hum. And stay OUT of the Trial.");
+      yield* say(g, SLIME(), "Now if you'll excuse me, I have somewhere to be. Somewhere important. Do NOT follow me.");
       g.dialogue.close();
-      s.goX = L.slimeX;                // off it hops, to stand guard at the end
+      s.goX = L.slimeExitX;            // off it hops (and then it's gone: it has somewhere to be)
+      s.leaving = true;
     }
     g.lockControls(false);
   }
 
-  // ================================================== the slime, if you insist on talking to it (Deeper Ends)
-  const SLIME_LINES = [
-    ['Still not finished. Still guarding. Still not happy about it.'],
-    ['The crystals hum. All night. I have not slept in WEEKS.'],
-    ['You fell. Through. The FLOOR. Who even does that.'],
-    ['Blue eyes? ...Never heard of them.', '...', 'Go away.'],
-    ["No, you can't go past. Hard hat zone. Do you have a hard hat? No. Exactly."],
-  ];
+  // ================================================== THE TRIAL (js/game/deeper-trial.js runs the waves)
+  function* trialStart(g, T) {
+    const p = g.player, again = (T.tries = (T.tries || 0) + 1) > 1;
+    g.lockControls(true);
+    p.vx = 0;
+    T.gate.close();                    // CLANG. no way back.
+    g.music(null);
+    yield again ? 0.8 : 1.1;
+    sfx('trialHorn');
+    g.shake(2, 1.3);
+    yield 0.5;
+    if (!again) {
+      g.banner = { title: 'THE TRIAL', sub: 'Six waves. No reward. No way out.', t: 0, dur: 3.2 };
+      yield 2.4;
+    }
+    g.music('onward');
+    g.lockControls(false);
+    T.state = 'between'; T.t = 0; T.pause = 0.6;   // here they come (again: from the wave you went down on)
+  }
+  /** All six waves down: the great door grinds open... onto nothing but black. */
+  function* trialDone(g, T) {
+    g.music(null);
+    yield 1.2;
+    T.openDoor(g);
+    yield 2.8;
+    g.saveFlag('trialDone');
+    g.setObjective('TAKE THE TORCH');
+  }
+
+  // ================================================== THE DARK: far along the corridor of skulls...
+  /** ...the skulls start to shake, and then they fall. And so do you. */
+  function* skullCollapse(g) {
+    const L = g.level, p = g.player;
+    g.lockControls(true);
+    p.vx = 0;
+    yield 0.5;
+    L.bones.shake = 1;                 // every skull in the corridor starts to rattle
+    sfx('skullRattle');
+    sfx('rumble', { dur: 2.2 });
+    g.shake(2, 2.3);
+    yield 2.6;
+    L.collapse(g);                     // ...and down they go. All of them. With you on top.
+    g.startAbyssFall();
+  }
+
+  // ================================================== THE ABYSS: you land. Something's coming. (It isn't.)
+  function* abyssArrival(g) {
+    const p = g.player, L = g.level;
+    g.lockControls(true);
+    const t0 = g.t;
+    yield () => { p.placeAt(L.landX, L.floorY - 300); p.vx = 0; p.vy = 0; return g.t - t0 > 0.8 ? true : undefined; };
+    p.vy = 160;
+    yield () => (p.onGround ? true : undefined);
+    g.checkpoint = { x: p.cx, y: p.feet };
+    sfx('landSlam');
+    g.shake(8, 0.6);
+    if (g.impact) g.impact(0.08);
+    g.dust(p.cx, p.feet, 30);
+    p.lying = true;
+    yield 2.0;
+    p.lying = false;
+    sfx('getUp');
+    yield 1.0;
+    g.saveProgress('abyss');
+    g.banner = { title: 'THE ABYSS', sub: 'All the way down. Probably.', t: 0, dur: 4.5 };
+    yield 1.6;
+    g.lockControls(false);
+  }
+  /** Out in the middle: the lights slam on, the warning goes up, the music kicks in... and then the slime drops in. */
+  function* abyssBoss(g) {
+    const L = g.level, p = g.player;
+    g.lockControls(true);
+    p.vx = 0;
+    yield 0.6;
+    // CLUNK. CLUNK. CLUNK: the lights, a pair at a time, from the far ends in (the dark lifts as they come on)
+    L.lit = true;
+    for (const pair of L.lampOrder) {
+      for (const i of pair) L.lightLamp(g, i);
+      sfx('lightsOn');
+      g.shake(2.5, 0.2);
+      g.darkness = Math.max(L.darknessAt(), g.darkness - 0.14);
+      yield 0.42;
+    }
+    L.sigil.t = 0;                     // the sigil on the far wall flares
+    sfx('runeLight');
+    yield 1.0;
+    // something BIG is coming
+    g.focusCamera(L.centerX, L.floorY - 60);
+    g.music('abyssboss');
+    g.warning = { title: '!! WARNING !!', text: 'A BOSS ENEMY IS APPROACHING', style: 'abyss' };
+    g.rumble(5);
+    yield 5.4;
+    // ...from above?
+    const s = g.npcs.find((n) => n.id === 'slime');
+    if (s) {
+      s.hidden = false; s.x = L.centerX + 10; s.y = L.floorY - 300; s.vy = 0; s.falling = true; s.goX = null;
+      sfx('slimeWhistle');
+      yield () => (s.falling ? undefined : true);
+    }
+    // THUD. (and the needle comes off the record)
+    g.music(null);
+    sfx('recordScratch');
+    sfx('crash');
+    g.warning = false;
+    g.rumbleT = 0;
+    g.shake(4, 0.35);
+    yield 1.1;
+    if (!s) { g.releaseCamera(); g.lockControls(false); return; }
+    yield* say(g, SLIME(), '...');
+    s.angry = true;
+    yield* say(g, SLIME(), 'NO. Nope. Turn it OFF.', { effect: 'shake' });
+    s.angry = false;
+    yield* say(g, SLIME(), "The boss isn't here yet.");
+    const c = yield* choose(g, ['Then why the WARNING?', "Who's the boss?"]);
+    if (c === 0) {
+      yield* say(g, SLIME(), 'Motion sensor. Somebody walked into the middle of the BOSS ARENA.');
+      yield* say(g, SLIME(), 'Somebody who is NOT the boss.');
+    } else {
+      yield* say(g, SLIME(), 'Classified.');
+      yield* say(g, SLIME(), "...Fine, I don't know. Nobody tells me anything. I wear the hard hat and I stand where they point.");
+    }
+    yield* say(g, SLIME(), 'And how did you even GET down here? You fell? AGAIN?');
+    yield* say(g, SLIME(), 'Through the floor of skulls. You walked on the skulls. EVERYBODY walks on the skulls.');
+    s.angry = true;
+    yield* say(g, SLIME(), "Wait here if you like. The boss comes when it's READY. And do NOT touch the lava.", { effect: 'shake' });
+    s.angry = false;
+    yield* say(g, SLIME(), "It's black. Black lava is the WORST lava.");
+    g.dialogue.close();
+    g.releaseCamera();
+    s.goX = L.slimeX;
+    g.saveFlag('abyssIntro');
+    g.lockControls(false);
+  }
+
+  // ================================================== the slime, if you insist on talking to it
+  const SLIME_LINES = {
+    deeper: [
+      ['The crystals hum. All night. I have not slept in WEEKS.'],
+      ['You fell. Through. The FLOOR. Who even does that.'],
+      ['Blue eyes? ...Never heard of them.', '...', 'Go away.'],
+    ],
+    abyss: [
+      ['The boss is late. Bosses are ALWAYS late. It is a whole thing with them.'],
+      ['When is it coming? Do I look like I carry a calendar?', 'I carry a hard hat. That is ALL I carry.'],
+      ['You walked on the skulls. The skulls fell. You fell.', 'You know that is not normal, right? Most people take the STAIRS.'],
+      ['Stop standing in the middle. That is where the BOSS stands.'],
+      ['The lights stay on now. Thanks to YOU. Do you know what purple fire costs down here?'],
+    ],
+  };
   function* slimeTalk(g, n) {
-    n.talk = ((n.talk === undefined ? -1 : n.talk) + 1) % SLIME_LINES.length;
+    const lines = SLIME_LINES[g.levelId === 'abyss' ? 'abyss' : 'deeper'];
+    n.talk = ((n.talk === undefined ? -1 : n.talk) + 1) % lines.length;
     n.angry = true;
-    for (const line of SLIME_LINES[n.talk]) yield* say(g, SLIME(), line);
+    for (const line of lines[n.talk]) yield* say(g, SLIME(), line);
     n.angry = false;
     g.dialogue.close();
     g.lockControls(false);
   }
 
-  ERX.Story.world = { vrd, jump, world1Arrival, checkshot, theBars, deeperArrival, slimeTalk, EYES };
+  ERX.Story.world = { vrd, jump, world1Arrival, checkshot, theBars, deeperArrival, trialStart, trialDone, skullCollapse, abyssArrival, abyssBoss, slimeTalk, EYES };
 })(window.ERX = window.ERX || {});
