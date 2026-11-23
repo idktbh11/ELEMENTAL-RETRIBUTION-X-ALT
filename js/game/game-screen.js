@@ -15,7 +15,8 @@
  * Progress (character.progress.stage): new -> tutorialDone -> enemiesCleared
  *   -> deepEnds -> reachedEnd -> awakened -> worldUnlocked -> deeperEnds (fell through
  *   world 1's old cave into THE DEEPER ENDS) -> abyss (through the floor of skulls,
- *   past the trial, into THE ABYSS). Flags on the side: trialDone, bossDefeated.
+ *   past the trial, into THE ABYSS) -> village (the lift out of the abyss blasts you into the sky;
+ *   you come down in NORMALTON). Flags on the side: trialDone, bossDefeated.
  *   Returning players resume at the right place. character.element is assigned ONLY at the reveal.
  */
 (function (ERX) {
@@ -26,7 +27,7 @@
   const { Gate, Dummy, Bolt, Orb, Shockwave, renderDecor, drawFlame } = ERX.Props;
   const sfx = (n, o) => ERX.Audio.playSfx(n, o);
 
-  const STAGES = ['new', 'tutorialDone', 'enemiesCleared', 'deepEnds', 'reachedEnd', 'awakened', 'worldUnlocked', 'deeperEnds', 'abyss'];
+  const STAGES = ['new', 'tutorialDone', 'enemiesCleared', 'deepEnds', 'reachedEnd', 'awakened', 'worldUnlocked', 'deeperEnds', 'abyss', 'village'];
   const ORB_LIGHTS = ['#ff5a5a', '#ffb84a', '#ffe95a', '#6aff8a', '#5ac8ff', '#b07aff'];
   // ability effects drawn behind characters (things on the ground)
   const BACK_FX = { zone: true, vortex: true, aura: true, spikes: true, pillar: true, turret: true };
@@ -72,6 +73,7 @@
       else if (stage === 'worldUnlocked') this.loadLevel('void', {});
       else if (stage === 'deeperEnds') this.loadLevel('deeper', {});
       else if (stage === 'abyss') this.loadLevel('abyss', {});
+      else if (stage === 'village') this.loadLevel('village', {});
       else this.loadLevel('deep', { at: stage === 'reachedEnd' ? 'hall' : 'start' });
       ERX.Audio.setAmbience('cave');
     }
@@ -84,7 +86,7 @@
     loadLevel(id, opts = {}) {
       const seed = (Date.now() >>> 0) ^ (id === 'cave' ? 0x1234 : 0x5678);
       this.levelId = id;
-      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel, world1: ERX.World1Level, oldcave: ERX.OldCaveLevel, deeper: ERX.DeeperEndsLevel, abyss: ERX.AbyssLevel }[id] || ERX.DeepEndsLevel;
+      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel, world1: ERX.World1Level, oldcave: ERX.OldCaveLevel, deeper: ERX.DeeperEndsLevel, abyss: ERX.AbyssLevel, village: ERX.VillageLevel }[id] || ERX.DeepEndsLevel;
       this.level = new Level(seed);
       this.backWall = this.level.renderBackWall ? this.level.renderBackWall() : null;
       this.frontLayer = this.level.renderFront ? this.level.renderFront() : null;
@@ -131,6 +133,7 @@
       this.effects = [];
       this.cine = null;
       this.cutscene = null;       // a boss's finale (js/game/finale.js)
+      this.liftRide = null;       // the lift out of the abyss (js/game/sky-launch.js)
       this.titleCard = null;      // a boss's name, big
       this.transitioning = false;
       this.dialogue.close();
@@ -319,15 +322,36 @@
         } else {
           p.placeAt(L.spawn.x, L.spawn.y);
           const won = this.character.progress && this.character.progress.bossDefeated;
-          if (won) {
-            // the Azure Zombie's beaten: the lights are on, the far passage is open, and the slime's guarding it
-            L.afterBoss();
-            const s = this.npcs.find((n) => n.id === 'slime');
-            if (s) { s.hidden = false; s.x = L.slimeX; s.y = L.floorY; s.guard = true; }
-          }
+          // the Azure Zombie's beaten: the lights are on, and the far passage is open (the lift's through there)
+          if (won) L.afterBoss();
           this.banner = { title: 'THE ABYSS', sub: won ? 'Quiet, now.' : 'All the way down. Probably.', t: 0, dur: 4 };
         }
         this.darkness = L.darknessAt();
+      } else if (id === 'village') {
+        // NORMALTON (js/game/level-village.js): the lift out of the abyss drops you in from a great height
+        // (js/game/world-fall.js, the 'village' fall); or you come back to it from a save
+        const L = this.level;
+        L.game = this;
+        L.ambience = 'village';
+        this.stageName = 'village';
+        this.darkness = 0;
+        this.hudAlpha = 1;
+        this.allowDeath = true;
+        if (this.worldTod === undefined) this.worldTod = 0.12;   // a fresh morning
+        for (const n of L.npcs) this.npcs.push(Object.assign({ talkIndex: 0, t: Math.random() * 3 }, n));
+        if (opts.launch) {
+          p.placeAt(L.landX, L.floorY - 600);
+          this.fall = new ERX.SkyFall(this, 'village');
+          this.fall.onDone = (g) => g.runScript(ERX.Story.world.villageArrival);
+        } else {
+          p.placeAt(L.spawn.x, L.spawn.y);
+          L.crater = { x: L.landX };
+          const s = this.npcs.find((n) => n.id === 'slime');
+          if (s) { s.hidden = false; s.x = L.slimeX; s.y = L.floorY; s.guard = true; }
+          ERX.Audio.playMusic('normalton');
+          ERX.Audio.setAmbience('village');
+          this.banner = { title: 'NORMALTON', sub: 'Population: 31. Suspiciously normal.', t: 0, dur: 4 };
+        }
       } else {
         const L = this.level;
         const at = opts.at === 'hall' ? L.checkpoints[L.checkpoints.length - 1] : opts.at === 'elevator' ? { x: L.elevator.x0 - 24, y: L.elevator.floorY } : L.spawn;
@@ -980,6 +1004,8 @@
 
       if (this.state === 'elevator') {
         this._updateElevator(dt);
+      } else if (this.state === 'lift') {
+        if (this.liftRide) this.liftRide.update(dt);
       } else if (this.state === 'nebula' || this.state === 'reveal') {
         this._updateAwaken(dt);
       } else if (this.state === 'black') {
@@ -1039,7 +1065,7 @@
 
       this._triggers();
       if (this.state !== 'intro') this.hudAlpha = Math.min(1, this.hudAlpha + dt * (this.state === 'play' || this.state === 'dead' ? 2 : 0));
-      if (this.state !== 'elevator' && this.state !== 'nebula' && this.state !== 'reveal' && this.state !== 'black' && this.state !== 'skyfall') this.camera.update(dt, this.player, this.level);
+      if (this.state !== 'elevator' && this.state !== 'lift' && this.state !== 'nebula' && this.state !== 'reveal' && this.state !== 'black' && this.state !== 'skyfall') this.camera.update(dt, this.player, this.level);
       const target = this.state === 'intro' || this.state === 'waking' ? 0.06 : this.level.darknessAt(this.player.cx, this.arenaLit);
       this.darkness = U.approach(this.darkness, target, this.flashT > 0 ? 12 : 1.4, dt);
     }
@@ -1097,6 +1123,7 @@
       for (const n of this.npcs) {
         n.t += dt;
         if (n.id === 'slime') { this._updateSlime(n, dt); continue; }
+        if (n.update) { n.update(n, dt, this); continue; }   // (villagers: js/game/level-village.js)
         const near = Math.abs(n.x - p.cx) < 40;
         if (n.pose === 'mine' && !n.talking && !near) {
           // swing the pickaxe at the wall
@@ -1142,6 +1169,14 @@
       this.bolts = [];
       this.fall = new ERX.CaveFall(this);
       this.fall.onDone = (g) => ERX.Scenes.transition('fade', 0.8, () => g.loadLevel('deeper', { fallIn: true }), { silent: true });
+    }
+    /** The lift out of the abyss, flat out (js/game/sky-launch.js)... and then the sky, and the village. */
+    startLiftRide() {
+      this.state = 'lift';
+      this.enemies = [];
+      this.bolts = [];
+      this.liftRide = new ERX.LiftRide(this);
+      this.liftRide.onDone = (g) => { g.liftRide = null; g.loadLevel('village', { launch: true }); };
     }
     /** A boss at zero: its finale (js/game/finale.js) takes over until it's done. */
     startBossFinale(boss) { this.cutscene = new ERX.Finale(this, boss); }
@@ -1350,6 +1385,7 @@
         this.dialogue.render(ctx, W, H);
         return;
       }
+      if (this.state === 'lift' && this.liftRide) { this.liftRide.render(ctx, W, H); this.dialogue.render(ctx, W, H); return; }
       if (this.state === 'nebula') { this._renderNebula(ctx, W, H); this.dialogue.render(ctx, W, H); return; }
       if (this.state === 'reveal') { this._renderReveal(ctx, W, H); this.dialogue.render(ctx, W, H); return; }
       if (this.state === 'black') { ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H); this.dialogue.render(ctx, W, H); return; }
@@ -1472,6 +1508,7 @@
         c.fillStyle = '#fff0a0'; c.fillRect(x - 3, top - 4, 3, 1);
         return;
       }
+      if (n.draw) { n.draw(c, cam, n, this); return; }   // (villagers)
       if (n.id === 'guide') {
         const FS = ERX.FigureSprite;
         FS.draw(c, FS.frame(n.talking ? 'smug' : 'neutral', 'idle', 0, n.facingNow || n.facing), Math.round(n.x) - cam.ix, Math.round(n.y) - cam.iy);
@@ -1875,7 +1912,7 @@
 
     _drawWake(ctx, W, H) {
       if (this.state === 'play' && this.lids >= 1) return;
-      if (this.state === 'dead' || this.state === 'elevator' || this.state === 'nebula' || this.state === 'reveal' || this.state === 'float' || this.state === 'black' || this.state === 'launch' || this.state === 'skyfall' || this.state === 'pull' || this.state === 'recall') return;
+      if (this.state === 'dead' || this.state === 'elevator' || this.state === 'lift' || this.state === 'nebula' || this.state === 'reveal' || this.state === 'float' || this.state === 'black' || this.state === 'launch' || this.state === 'skyfall' || this.state === 'pull' || this.state === 'recall') return;
       const open = this.state === 'intro' ? 0 : this.lids;
       const cy = U.clamp(Math.round((this.player.y + 12 - this.camera.y) * this.zoom), 40, H - 40);
       const gap = Math.round(H * open);

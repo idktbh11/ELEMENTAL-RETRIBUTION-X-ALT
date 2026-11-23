@@ -273,6 +273,26 @@
       for (let x = -1; x <= 8; x++) H(x, 1, '#b88a20');
       H(7, -1, '#ffffff'); H(8, -1, '#fff6b0');
     }
+    // ...and the villagers' (js/game/level-village.js): a farmer's straw hat, a baker's toque, the mayor's
+    // top hat, a granny's headscarf, a flat cap
+    else if (look.hat === 'straw') {
+      for (let x = -2; x <= 9; x++) H(x, 0, x < 0 || x > 7 ? '#c8a040' : '#e8c86a');
+      for (let x = 1; x <= 6; x++) { H(x, -1, '#c84a3a'); H(x, -2, x < 3 ? '#f4dc8a' : '#e8c86a'); H(x, -3, '#e8c86a'); }
+      H(2, -3, '#f4dc8a'); H(-2, 1, '#a88030'); H(9, 1, '#a88030');
+    } else if (look.hat === 'chef') {
+      for (let x = 0; x <= 7; x++) H(x, 0, '#e0e4ec');
+      for (let y = -5; y <= -1; y++) for (let x = 1; x <= 6; x++) H(x, y, x === 6 || y === -1 ? '#d8dce6' : '#ffffff');
+      H(0, -4, '#ffffff'); H(0, -3, '#e0e4ec'); H(7, -4, '#e0e4ec'); H(2, -6, '#ffffff'); H(3, -6, '#ffffff'); H(5, -6, '#e0e4ec');
+    } else if (look.hat === 'top') {
+      for (let x = -1; x <= 8; x++) H(x, 0, '#1e1a24');
+      for (let y = -6; y <= -1; y++) for (let x = 1; x <= 6; x++) H(x, y, y === -2 ? '#8a2a3a' : x === 2 ? '#3a3444' : '#26222e');
+    } else if (look.hat === 'scarf') {
+      for (let y = -1; y <= 2; y++) for (let x = y < 0 ? 1 : 0; x <= (y < 1 ? 6 : 3); x++) H(x, y, (x + y) % 3 === 0 ? '#f0d0dc' : '#c8507a');
+      H(-1, 3, '#c8507a'); H(-2, 4, '#a8406a'); H(-1, 4, '#c8507a');   // tied at the back
+    } else if (look.hat === 'cap') {
+      for (let x = 0; x <= 7; x++) { H(x, -1, x < 2 ? '#7a6a5a' : '#6a5a4a'); H(x, 0, '#5a4a3a'); }
+      for (let x = 6; x <= 9; x++) H(x, 1, '#4a3a2a');
+    }
     b.outline(c32(OUTLINE));
     return b;
   }

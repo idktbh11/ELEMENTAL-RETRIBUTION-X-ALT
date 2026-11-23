@@ -178,7 +178,7 @@
     get pace() { return this.phase === 2 ? 0.8 : 1; }   // phase 2: every wind-up a bit quicker
     minions() { return this.game.enemies.filter((e) => e.zone === 'azure' && !e.dead); }
     /** The stretch of floor it can put things on (inside the walls). */
-    span() { return [4 * 16 + 8, this.game.level.pw - 4 * 16 - 8]; }
+    span() { const L = this.game.level, x0 = L.arenaX0 !== undefined ? L.arenaX0 : 3 * 16, x1 = L.arenaX1 !== undefined ? L.arenaX1 : L.pw - 3 * 16; return [x0 + 24, x1 - 24]; }
 
     /** The fight starts (story-world.js: abyssBoss, once its health bar is down). */
     begin() { this.active = true; this.setState('chase'); this.cool = 0.6; this.summonT = 0; }

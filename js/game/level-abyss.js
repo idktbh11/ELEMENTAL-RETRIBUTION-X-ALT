@@ -7,11 +7,15 @@
  * them. Lots of space. Too much space. Almost as if something BIG is meant
  * to stand in it: walk out into the middle and six purple lights slam on,
  * a sigil on the wall flares, and a warning goes up: A BOSS ENEMY IS
- * APPROACHING (story-world.js: abyssBoss). It isn't. Not yet.
+ * APPROACHING (story-world.js: abyssBoss). The AZURE ZOMBIE (js/game/boss-azure.js).
+ * Beat it and the seal on the passage through the far pillar breaks: through there,
+ * a building site and a PROTOTYPE EXPRESS LIFT with a big red button (js/game/sky-launch.js).
+ * (The view stops at that pillar until the seal's gone: camRight.)
  *
  *   level.drawSky()     the cavern: far walls with lava falls, the pillars, the black lava lake
- *   level.drawLive()    the lamps, the sigil
- *   level.update()      lava bubbling; walking into the middle starts the boss intro
+ *   level.drawLive()    the lamps, the sigil, the lift (drawLift)
+ *   level.update()      lava bubbling; walking into the middle starts the boss intro; the lift going up
+ *   level.interact()    in the lift: PRESS THE BIG RED BUTTON
  *   level.liveLights()  the lamps, the sigil, the lava's glow
  *   level.lightLamp() / lightAll()
  *
@@ -233,12 +237,15 @@
 
   // ============================================================ the level
   const FLOOR = 26;
+  const ARENA = 85;                        // the arena's width (tiles); past its far pillar, the lift room
+  const ROOM = { x1: 99, top: FLOOR - 8 };   // the lift room (from ARENA to x1), and how high its ceiling is
+  const SHAFT = { x0: 92, x1: 97 };          // the lift shaft, going up out of the room
   // the six lamps (tiles): they light in pairs, from the far ends in
   const LAMPS = [8, 19, 30, 54, 65, 76];
 
   class AbyssLevel extends ERX.CaveLevel {
     configure() {
-      this.W = 85;
+      this.W = ROOM.x1 + 2;
       this.H = 34;
       this.pal = PAL;
       this.sections = [];
@@ -251,32 +258,40 @@
       this.tiles.fill(0);
       // the slab you land on (two tiles thick, the whole way across), and a great pillar at each end
       this.solid(0, this.W, FLOOR, FLOOR + 2);
-      this.solid(0, 3, 0, this.H); this.solid(this.W - 3, this.W, 0, this.H);
-      // a passage into the far pillar: sealed (blue runes) until the boss is dead. Beyond it: not finished.
-      this.air(this.W - 3, this.W, FLOOR - 3, FLOOR);
-      this.passage = { tx: this.W - 3, x: (this.W - 3) * TS, top: (FLOOR - 3) * TS, sealed: true, breakT: -1 };
+      this.solid(0, 3, 0, this.H); this.solid(ARENA - 3, ARENA, 0, this.H);
+      // a passage into the far pillar: sealed (blue runes) until the boss is dead. Through it: the lift room
+      this.air(ARENA - 3, ARENA, FLOOR - 3, FLOOR);
+      this.passage = { tx: ARENA - 3, x: (ARENA - 3) * TS, top: (FLOOR - 3) * TS, sealed: true, breakT: -1 };
+      // the lift room: cut into the rock past the pillar (a building site: timber props, work lights, cones),
+      // and the lift's shaft going up out of it. The view stops at the pillar until the seal's broken.
+      this.solid(ARENA, this.W, 0, this.H);
+      this.air(ARENA, ROOM.x1, ROOM.top, FLOOR);
+      this.air(SHAFT.x0, SHAFT.x1, 0, FLOOR);
+      this.arenaX0 = 3 * TS; this.arenaX1 = (ARENA - 3) * TS;
+      this.camRight = ARENA * TS;
+      this.room = { x0: ARENA * TS, x1: ROOM.x1 * TS, top: ROOM.top * TS, shaft0: SHAFT.x0 * TS, shaft1: SHAFT.x1 * TS };
+      this.lift = { x: ((SHAFT.x0 + SHAFT.x1) / 2) * TS, y: 0, vy: 0, state: 'idle', gate: 0, press: 0, t: 0 };
       this.setSeal(true);
       this.floorY = FLOOR * TS;
       this.underY = (FLOOR + 2) * TS;          // the slab's underside
-      this.centerX = Math.round(this.W / 2) * TS;
+      this.centerX = Math.round(ARENA / 2) * TS;
       this.landX = 15 * TS;
       this.spawn = { x: 15 * TS, y: this.floorY };
       this.triggerX = this.centerX - 7 * TS;   // walk this far out and the lights come on (and it comes)
-      this.slimeX = this.passage.x - 10;       // after the boss: where the slime stands guard (in front of the passage)
       this.checkpoints = [this.spawn];
       this.decor = [];
       this.lights = [];
       this.torches = [];
       this.braziers = [];
-      this.signs = [];
+      this.signs = [{ x: (ARENA + 2.6) * TS, y: FLOOR * TS, text: 'PROTOTYPE EXPRESS LIFT\nTakes you up to the surface.\nQuickly. Very quickly.\nNOT FINISHED. DO NOT USE.\n   - Management', read: false }];
       this.chalk = [];
-      this.npcs = [{ id: 'slime', name: 'GRUMPY SLIME', x: this.slimeX, y: this.floorY, facing: -1, hidden: true }];
+      this.npcs = [];
       this.enemySpawns = [];
       this.lamps = LAMPS.map((tx) => ({ x: tx * TS + 8, y: this.floorY, lit: false, t: 0, ph: rng.range(0, 6) }));
       this.lampOrder = [[0, 5], [1, 4], [2, 3]];
       this.lit = false;
       this.sigil = { x: this.centerX, y: this.floorY - 100, r: 56, t: -1 };
-      for (let x = 4; x < this.W - 4; x++) if (rng.chance(0.25)) this.decor.push({ kind: 'pebbles', x: x * TS + rng.int(0, 12), y: this.floorY });
+      for (let x = 4; x < ARENA - 4; x++) if (rng.chance(0.25)) this.decor.push({ kind: 'pebbles', x: x * TS + rng.int(0, 12), y: this.floorY });
       this.bubbleT = 1;
     }
 
@@ -306,21 +321,22 @@
       const P = this.passage;
       if (!P.sealed) return;
       this.setSeal(false);
+      this.camRight = undefined;   // (and now you can see what's through there)
       P.breakT = 0;
       sfx('sealBreak');
       if (g) for (let i = 0; i < 30; i++) g.fx.add({ x: P.x + 2 + Math.random() * 4, y: P.top + Math.random() * 48, vx: U.lerp(-80, -10, Math.random()), vy: U.lerp(-60, 30, Math.random()), ay: 300, life: U.lerp(0.5, 1, Math.random()), color: Math.random() < 0.5 ? '#4a8aff' : '#c8e8ff', size: Math.random() < 0.4 ? 2 : 1, fadeOut: 0.3 });
     }
     /** Back again after the boss: lights on, the passage open (and guarded). */
-    afterBoss() { this.lightAll(); this.setSeal(false); this.passage.breakT = 9; this.introDone = true; this.bossDone = true; }
+    afterBoss() { this.lightAll(); this.setSeal(false); this.camRight = undefined; this.passage.breakT = 9; this.introDone = true; this.bossDone = true; }
 
     /** The slab's underside: rough black rock hanging down over the lava, dark crystals hanging off it. */
     renderBackWall() {
       const b = new PB(this.pw, this.ph), rng = new U.RNG(this.seed ^ 0x51ab), y0 = this.underY;
-      for (let x = 3 * TS; x < (this.W - 3) * TS; x++) {
+      for (let x = 3 * TS; x < (ARENA - 3) * TS; x++) {
         const d = Math.round(10 + 9 * Math.sin(x * 0.021) + 6 * Math.sin(x * 0.067 + 1) + 3 * Math.sin(x * 0.31));
         for (let y = 0; y < d; y++) b.set(x, y0 + y, c32(y < 3 ? PAL.rock[2] : y < d - 3 ? PAL.rock[3] : PAL.rock[4]));
       }
-      for (let x = 3 * TS + rng.int(10, 30); x < (this.W - 4) * TS; x += rng.int(24, 60)) {
+      for (let x = 3 * TS + rng.int(10, 30); x < (ARENA - 4) * TS; x += rng.int(24, 60)) {
         const c = rng.pick(CRYSTALS), len = rng.int(6, 14);
         let top = y0;
         while (top < this.ph - 1 && b.solid(x, top + 1)) top++;
@@ -331,9 +347,89 @@
       }
       // the far passage: a tunnel into the pillar, black inside
       const P = this.passage;
-      for (let y = P.top; y < this.floorY; y++) for (let x = P.x; x < this.pw; x++) b.set(x, y, c32((x - P.x) < 3 ? '#0e0a16' : '#040208'));
+      for (let y = P.top; y < this.floorY; y++) for (let x = P.x; x < ARENA * TS; x++) b.set(x, y, c32((x - P.x) < 3 ? '#0e0a16' : '#040208'));
+      const marks = this.paintRoom(b, rng);
       b.outline(c32(INK));
-      return b.toCanvas();
+      const cv = b.toCanvas(), ctx = cv.getContext('2d');
+      if (ERX.Font && ERX.Font.draw) for (const m of marks) ERX.Font.draw(ctx, m.text, m.x, m.y, { color: m.color, align: 'center' });
+      return cv;
+    }
+
+    /**
+     * The lift room's back wall (into the back-wall buffer): rough rock, timber props, the shaft (its rails, hazard
+     * stripes up both edges), two work lamps, and a building site's worth of clutter. Returns its signs' words.
+     */
+    paintRoom(b, rng) {
+      const Rm = this.room, fy = this.floorY, n = new U.Noise(0x11f7), marks = [];
+      const R = (x, y, w, h, col) => { if (w > 0 && h > 0) b.rect(Math.round(x), Math.round(y), Math.round(w), Math.round(h), c32(col)); };
+      for (let y = Rm.top; y < fy; y++) for (let x = Rm.x0; x < Rm.x1; x++) {
+        const v = n.n2(x * 0.07, y * 0.11) * 0.75 + n.n2(x * 0.3, y * 0.3) * 0.25;
+        b.set(x, y, c32(['#2e2640', '#261f36', '#1e182c', '#171222'][U.clamp(Math.floor(v * 4), 0, 3)]));
+      }
+      // the shaft: black, a rail up each side of its back wall, a crossbeam every so often
+      for (let y = 0; y < fy; y++) for (let x = Rm.shaft0; x < Rm.shaft1; x++) b.set(x, y, c32(y % 72 < 4 ? '#3a3440' : '#0c0a12'));
+      for (const rx of [Rm.shaft0 + 9, Rm.shaft1 - 12]) { R(rx, 0, 3, fy, '#3a3a48'); R(rx, 0, 1, fy, '#8a8a9a'); for (let y = 5; y < fy; y += 12) R(rx + 1, y, 1, 1, '#c8c8d4'); }
+      for (const ex of [Rm.shaft0 - 4, Rm.shaft1]) for (let y = 0; y < fy; y++) R(ex, y, 4, 1, Math.floor((y + (ex > Rm.shaft0 ? 2 : 0)) / 4) % 2 ? '#d8b020' : '#1a1a20');
+      // timber props and beams holding the ceiling up
+      for (const px of [Rm.x0 + 10, Rm.shaft0 - 26, Rm.shaft1 + 16]) { R(px, Rm.top, 6, fy - Rm.top, '#6a4630'); R(px, Rm.top, 1, fy - Rm.top, '#8a5e40'); R(px + 5, Rm.top, 1, fy - Rm.top, '#4a3022'); }
+      R(Rm.x0, Rm.top, Rm.shaft0 - 4 - Rm.x0, 6, '#6a4630'); R(Rm.x0, Rm.top + 5, Rm.shaft0 - 4 - Rm.x0, 1, '#4a3022');
+      R(Rm.shaft1 + 4, Rm.top, Rm.x1 - Rm.shaft1 - 4, 6, '#6a4630'); R(Rm.shaft1 + 4, Rm.top + 5, Rm.x1 - Rm.shaft1 - 4, 1, '#4a3022');
+      // the work lamps: little cages round bright bulbs, hanging off the beams
+      this.roomLamps = [];
+      for (const lx of [Rm.x0 + 40, Rm.shaft1 + 13]) {
+        const ly = Rm.top + 14;
+        R(lx, Rm.top + 6, 1, 6, '#3a3a48');
+        R(lx - 3, ly - 2, 7, 9, '#1a1424'); R(lx - 2, ly - 1, 5, 7, '#ffe8a0'); R(lx - 1, ly, 3, 4, '#ffffff');
+        for (const k of [-2, 0, 2]) R(lx + k, ly - 1, 1, 7, '#5a5a6a');
+        this.roomLamps.push({ x: lx, y: ly + 3 });
+      }
+      // a board over the shaft
+      const bx = (Rm.shaft0 + Rm.shaft1) / 2, by = Rm.top - 2, text = 'EXPRESS LIFT', w = (ERX.Font && ERX.Font.measure ? ERX.Font.measure(text) : 70) + 10;
+      R(bx - w / 2 - 1, by - 1, w + 2, 12, '#1a1424'); R(bx - w / 2, by, w, 10, '#d8b020'); R(bx - w / 2, by, w, 1, '#f4d860');
+      marks.push({ x: Math.round(bx), y: by + 2, text, color: '#1a1424' });
+      // the clutter: cones, a toolbox, a bucket, a coil of rope, a spare hard hat, planks
+      const cone = (x) => { for (let yy = 0; yy < 10; yy++) { const hw = Math.round(yy * 0.4); R(x - hw, fy - 11 + yy, hw * 2 + 1, 1, yy === 4 || yy === 5 ? '#f4f0e8' : '#f07a2a'); } R(x - 5, fy - 2, 11, 2, '#c85a1a'); };
+      cone(Rm.x0 + 26); cone(Rm.x0 + 33); cone(Rm.x1 - 10);
+      R(Rm.x0 + 52, fy - 7, 14, 7, '#c83a2a'); R(Rm.x0 + 52, fy - 7, 14, 1, '#e86a5a'); R(Rm.x0 + 56, fy - 10, 6, 3, '#3a3a44');
+      R(Rm.shaft1 + 26, fy - 9, 9, 9, '#8a8a98'); R(Rm.shaft1 + 26, fy - 9, 9, 1, '#c8c8d4'); R(Rm.shaft1 + 27, fy - 12, 7, 1, '#5a5a6a');
+      b.ellipse(Math.round(Rm.shaft1 + 44), fy - 3, 6, 3, c32('#a88a5a')); b.ellipse(Math.round(Rm.shaft1 + 44), fy - 3, 3, 1, c32('#6a5434'));
+      R(Rm.x0 + 70, fy - 4, 8, 3, '#ffd34d'); R(Rm.x0 + 69, fy - 2, 10, 1, '#c89a2a');
+      for (let i = 0; i < 3; i++) R(Rm.shaft0 - 52 + i * 2, fy - 3 - i * 3, 22, 3, i % 2 ? '#a8784a' : '#c89a64');
+      return marks;
+    }
+
+    /** The lift: a cage of hazard-yellow girders on a steel floor, hanging on cables up the shaft; a gate; the button. */
+    drawLift(ctx, cam, g) {
+      const Lf = this.lift, ox = -cam.ix, oy = -cam.iy, vw = g.view.width;
+      const cx = Math.round(Lf.x) + ox, fy = Math.round(this.floorY - Lf.y) + oy, cw = 60, ch = 46, x0 = cx - cw / 2, y0 = fy - ch;
+      // the work lamps' warm light, pooling round them
+      for (const l of this.roomLamps || []) {
+        const lx = l.x + ox, ly = l.y + oy;
+        if (lx < -90 || lx > vw + 90) continue;
+        const gr = ctx.createRadialGradient(lx, ly, 2, lx, ly, 64);
+        gr.addColorStop(0, 'rgba(255,214,140,0.26)'); gr.addColorStop(1, 'rgba(255,214,140,0)');
+        ctx.fillStyle = gr; ctx.fillRect(lx - 64, ly - 64, 128, 128);
+      }
+      if (cx < -60 || cx > vw + 60) return;
+      const r = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
+      r(cx - 10, -10, 1, y0 + 10, '#4a4a58'); r(cx + 9, -10, 1, y0 + 10, '#4a4a58');                       // the cables
+      r(x0 + 3, y0 + 3, cw - 6, ch - 6, 'rgba(24,22,32,0.55)');
+      ctx.fillStyle = 'rgba(138,138,152,0.4)'; for (let x = x0 + 6; x < x0 + cw - 4; x += 6) ctx.fillRect(x, y0 + 4, 1, ch - 8); for (let y = y0 + 6; y < fy - 3; y += 6) ctx.fillRect(x0 + 4, y, cw - 8, 1);
+      r(x0 - 1, y0 - 1, cw + 2, 5, '#120c18'); r(x0 - 1, y0, 5, ch, '#120c18'); r(x0 + cw - 4, y0, 5, ch, '#120c18');
+      r(x0, y0, cw, 3, '#d8b020'); r(x0, y0, 3, ch, '#d8b020'); r(x0 + cw - 3, y0, 3, ch, '#d8b020'); r(x0, y0, cw, 1, '#f4d860');
+      // the floor (striped along its front edge) and its underside
+      r(x0 - 2, fy - 1, cw + 4, 6, '#120c18');
+      for (let x = x0 - 1; x < x0 + cw + 1; x++) r(x, fy, 1, 3, Math.floor((x - x0) / 4) % 2 ? '#d8b020' : '#2a2a30');
+      r(x0, fy + 3, cw, 2, '#3a3a48');
+      // the gate: a grille that comes down over the way in
+      const gh = Math.round((ch - 6) * Lf.gate);
+      if (gh > 0) { r(x0 + 1, y0 + 3, 2, gh, '#8a8a98'); for (let y = y0 + 4; y < y0 + 3 + gh; y += 5) r(x0 - 3, y, 8, 1, '#8a8a98'); r(x0 - 3, y0 + 3 + gh - 1, 8, 2, '#5a5a6a'); }
+      // the control box on the right-hand post: the BIG RED BUTTON (it glows; pressed, it's dark and pushed in)
+      const bx = x0 + cw - 13, byy = y0 + 18, lit = Lf.state === 'idle' || Math.floor(Lf.t * 6) % 2 === 0;
+      r(bx - 1, byy - 1, 13, 13, '#120c18'); r(bx, byy, 11, 11, '#8a8a98'); r(bx, byy, 11, 1, '#c8c8d4');
+      r(bx + 2, byy + 3 + (Lf.press > 0 ? 1 : 0), 7, 5 - (Lf.press > 0 ? 1 : 0), Lf.state === 'idle' ? (Math.floor(Lf.t * 2) % 2 ? '#ff4a3a' : '#e8302a') : lit ? '#ff6a4a' : '#8a1a14');
+      r(bx + 3, byy + 3 + (Lf.press > 0 ? 1 : 0), 2, 1, '#ffb0a0');
+      r(bx + 1, byy + 9, 9, 1, '#f4f0e8');      // (a little label. It says DO NOT PRESS. Obviously.)
     }
 
     drawSky(ctx, cam, vw, vh, g) {
@@ -386,6 +482,7 @@
         for (const yy of [10, 24, 38]) { ctx.fillStyle = '#4a8aff'; ctx.fillRect(qx, qy + yy, 16, 1); ctx.fillStyle = '#e8f4ff'; ctx.fillRect(qx + 6, qy + yy - 1, 3, 3); }
         ctx.globalAlpha = 1;
       }
+      if (this.camRight === undefined) this.drawLift(ctx, cam, g);
       // the lamps: a stone post, a bowl of dark crystal on top; lit, a purple fire burns in it
       for (const L of this.lamps) {
         const x = Math.round(L.x) - cam.ix, y = Math.round(L.y) - cam.iy;
@@ -418,6 +515,13 @@
       if (this.sigil.t >= 0) this.sigil.t += dt;
       if (this.portal) this.portal.k = this.portal.open ? Math.min(1, this.portal.k + dt / 1.2) : Math.max(0, this.portal.k - dt / 0.6);
       if (this.passage.breakT >= 0) this.passage.breakT += dt;
+      // the lift: its gate coming down, rising (carrying you up the shaft with it)
+      const Lf = this.lift;
+      Lf.t += dt;
+      Lf.press = Math.max(0, Lf.press - dt * 2.5);
+      if (Lf.state === 'closing') { Lf.gate = Math.min(1, Lf.gate + dt * 2.2); if (Lf.gate >= 1) Lf.state = 'shut'; }
+      if (Lf.state === 'rising') { Lf.vy = Math.min(Lf.vy + 80 * dt, 240); Lf.y += Lf.vy * dt; }
+      if (Lf.carry && g.player) { const pl = g.player; pl.y = this.floorY - Lf.y - pl.h; pl.vy = 0; pl.vx = 0; pl.onGround = true; }
       // the lava, far below: blorp
       this.bubbleT -= dt;
       if (this.bubbleT <= 0) { this.bubbleT = U.lerp(1.5, 4, Math.random()); sfx('lavaBubble', { minGap: 0.4 }); }
@@ -429,12 +533,26 @@
       }
     }
 
+    /** In the lift, by the button: press it. (Of course you're going to press it.) */
+    interact(g) {
+      const p = g.player, Lf = this.lift;
+      if (!this.bossDone || Lf.state !== 'idle' || g.script) return null;
+      if (Math.abs(p.cx - Lf.x) > 24 || Math.abs(p.feet - this.floorY) > 4) return null;
+      return { x: Lf.x + 18, y: this.floorY - 56, text: '{use} PRESS THE BIG RED BUTTON', act: (gg) => gg.runScript(ERX.Story.world.liftGo) };
+    }
+
     liveLights(g) {
       const out = [];
       for (const L of this.lamps) if (L.lit) out.push({ x: L.x, y: L.y - 54, r: 118 * (0.96 + 0.04 * Math.sin(g.t * 7 + L.ph)), color: '#a050ff', intensity: 1 });
       if (this.sigil.t >= 0) out.push({ x: this.sigil.x, y: this.sigil.y, r: 84, color: '#b46aff', intensity: 0.7 * Math.min(1, this.sigil.t / 0.6) });
       if (this.portal && this.portal.k > 0) out.push({ x: this.sigil.x, y: this.sigil.y, r: 70, color: '#4a8aff', intensity: this.portal.k });
       if (this.passage.sealed) out.push({ x: this.passage.x + 8, y: this.passage.top + 24, r: 40, color: '#4a8aff', intensity: 0.7 });
+      if (this.camRight === undefined) {
+        // the lift room's work lamps, and the big red button, glowing
+        for (const l of this.roomLamps || []) out.push({ x: l.x, y: l.y, r: 78 * (0.97 + 0.03 * Math.sin(g.t * 13 + l.x)), color: '#ffd890', intensity: 0.95 });
+        const Lf = this.lift;
+        out.push({ x: Lf.x + 23, y: this.floorY - Lf.y - 22, r: 18, color: '#ff4a3a', intensity: Lf.state === 'idle' ? 0.6 + 0.3 * Math.sin(g.t * 6) : 0.4 });
+      }
       if (g && g.enemies) for (const e of g.enemies) { const l = e.light && !e.dead && !e.hidden ? e.light() : null; if (l) out.push(l); }   // the boss and its minions burn blue
       if (this.backdrop && g && g.camera) for (const l of this.backdrop.lights(g.camera)) out.push(l);
       return out;

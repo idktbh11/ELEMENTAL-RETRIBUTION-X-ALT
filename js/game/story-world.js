@@ -11,7 +11,11 @@
  *   ENDS, where guess who turns up again. Far in: THE TRIAL (six waves, then
  *   a great door), a pitch-black corridor (take the torch), a floor of skulls
  *   that gives way (js/game/abyss-fall.js)... and THE ABYSS, where the lights
- *   slam on and a boss is approaching. Or would be. If it were finished.
+ *   slam on and the AZURE ZOMBIE comes out of the sigil (js/game/boss-azure.js).
+ *   Beat it, and the far passage opens: a building site, a prototype lift, a big
+ *   red button (DO NOT PRESS). It goes up. Very fast (js/game/sky-launch.js), and
+ *   blasts you out into the sky; you come down in NORMALTON, where everyone stares,
+ *   and guess who comes down after you, to guard the unfinished road out.
  */
 (function (ERX) {
   'use strict';
@@ -391,7 +395,7 @@
     boss.begin();
     g.lockControls(false);
   }
-  /** After the finale: the seal on the far passage breaks... and guess who drops in to guard it. */
+  /** After the finale: the seal on the far passage cracks and falls away... and there's a light on, through there. */
   function* abyssAfter(g) {
     const L = g.level, p = g.player;
     g.lockControls(true);
@@ -399,28 +403,169 @@
     g.saveFlag('bossDefeated');
     yield 1.0;
     L.unseal(g);
+    L.bossDone = true;
     g.shake(3, 0.6);
-    yield 1.4;
+    yield 0.7;
+    g.focusCamera(L.passage.x + 60, L.floorY - 50);   // (a building site, round the corner. With a lift in it.)
+    yield 2.2;
+    g.releaseCamera();
+    g.setObjective('THROUGH THE PASSAGE  →');
+    g.lockControls(false);
+  }
+
+  // ================================================== THE LIFT, and what happens when you press the button
+  /** The big red button. (It says DO NOT PRESS.) The gate comes down, the lift starts up... and doesn't stop (js/game/sky-launch.js). */
+  function* liftGo(g) {
+    const L = g.level, p = g.player, Lf = L.lift;
+    g.lockControls(true);
+    g.objective = null;
+    p.vx = 0;
+    p.placeAt(Lf.x - 7, L.floorY);
+    p.facing = 1;
+    p.cinePose = 'idle';
+    yield 0.35;
+    Lf.press = 1; Lf.state = 'pressed';
+    sfx('liftButton');                                        // click.
+    yield 1.2;                                                // ...nothing.
+    sfx('liftClunk'); g.shake(2, 0.25);                       // CLANG: the gate comes down
+    Lf.state = 'closing';
+    yield () => (Lf.state === 'shut' ? true : undefined);
+    yield 0.6;
+    sfx('liftHum');                                           // and up it goes. Nice and slow.
+    Lf.carry = true; Lf.vy = 12; Lf.state = 'rising';
+    yield 1.5;
+    sfx('liftLurch'); g.shake(3, 0.4);                         // ...a bit faster...
+    yield 1.0;
+    Lf.carry = false; p.cinePose = null;
+    g.music(null);
+    g.startLiftRide();                                        // ...a LOT faster
+  }
+
+  // ================================================== NORMALTON (js/game/level-village.js)
+  /** Everyone in Normalton: how they look, and what they've got to say. (The level says where they stand.) */
+  const VILLAGERS = {
+    bramble: {
+      name: 'MAYOR BRAMBLE', pitch: 0.85,
+      look: { gender: 0, skin: 0, hair: 8, hairColor: 5, eyes: 4, outfit: 6, outfitColor: 3, pants: 5, hat: 'top' },
+      lines: [
+        ['Welcome to Normalton! Population: thirty-one.', 'Thirty-two, counting the goose. Thirty-one, since the goose went missing.'],
+        ['That crater in the square? Leave it. It is a landmark now.', 'We shall put a little fence round it. Possibly a plaque.'],
+        ['The new road east is nearly finished! Any day now.', 'The construction slime has been saying "any day now" for... some time.'],
+      ],
+    },
+    rosa: {
+      name: 'BAKER ROSA', pitch: 1.2,
+      look: { gender: 1, skin: 1, hair: 4, hairColor: 1, eyes: 0, outfit: 5, outfitColor: 10, pants: 1, hat: 'chef' },
+      lines: [
+        ['Fresh buns! Still warm!', 'Not for you, though, dear. You would only land on them.'],
+        ['I bake two hundred buns every morning. Two hundred.', 'Nobody has ever asked who eats them all. Please do not be the first.'],
+        ['You came down so hard my souffle fell.', 'Every souffle in the village fell. All at once. It was a very sad noise.'],
+      ],
+    },
+    fenwick: {
+      name: 'FENWICK', pitch: 0.95,
+      look: { gender: 0, skin: 3, hair: 0, hairColor: 0, eyes: 1, outfit: 3, outfitColor: 4, pants: 1, hat: 'cap' },
+      lines: [
+        ['Goods! Wares! Things! All perfectly normal.', 'The shop opens tomorrow. It has opened tomorrow for eleven years.'],
+        ['I sell potions. Well. Coloured water. In potion bottles.', 'Business has never been better. Nobody has checked.'],
+      ],
+    },
+    pip: {
+      name: 'NANA PIP', pitch: 1.35,
+      look: { gender: 1, skin: 0, hair: 4, hairColor: 6, eyes: 3, outfit: 2, outfitColor: 6, pants: 6, hat: 'scarf' },
+      lines: [
+        ['Ooh, a falling star! And it landed! How lovely, dear.', 'In my day the stars stayed UP. That was rather the point of them.'],
+        ['Sit down, dear. You look like you have fallen a very long way.', '...Oh. You have. Well. Sit down anyway.'],
+        ['That slime at the gate? Lovely manners. Terrible temper.', 'Wears that little hat everywhere. Even to bed, I expect.'],
+      ],
+    },
+    molly: {
+      name: 'MOLLY', pitch: 1.1,
+      look: { gender: 1, skin: 2, hair: 2, hairColor: 2, eyes: 1, outfit: 5, outfitColor: 0, pants: 1 },
+      lines: [
+        ['Welcome to the Sleepy Goose! Best beds in Normalton.', 'Only beds in Normalton. Still the best, though.'],
+        ['The goose on the sign? That was Gerald. Before he went missing.', 'We do not talk about Gerald.'],
+      ],
+    },
+    holt: {
+      name: 'HOLT THE SMITH', pitch: 0.7,
+      look: { gender: 0, skin: 4, hair: 7, hairColor: 0, eyes: 0, outfit: 3, outfitColor: 7, pants: 2 },
+      lines: [
+        ['*CLANG*', '...Oh. Hello. Sorry. I hit things. For a living.'],
+        ['You fell out of the sky and walked away?', 'Tough as an anvil, you are. I like you.'],
+      ],
+    },
+    timmy: {
+      name: 'TIMMY', pitch: 1.6,
+      look: { gender: 0, skin: 1, hair: 1, hairColor: 3, eyes: 3, outfit: 1, outfitColor: 9, pants: 7 },
+      lines: [
+        ['WHOA! You fell out of the SKY! Do it again! DO IT AGAIN!'],
+        ['When I grow up I want to fall out of the sky too.', 'Mum says I am not allowed.'],
+        ['I saw a goose fly over the east road yesterday!', 'The slime would not let me go and look. It never lets ANYONE go and look.'],
+      ],
+    },
+    clover: {
+      name: 'FARMER CLOVER', pitch: 1.05,
+      look: { gender: 1, skin: 2, hair: 3, hairColor: 4, eyes: 2, outfit: 4, outfitColor: 2, pants: 4, hat: 'straw' },
+      lines: [
+        ['Mind the chickens. They have opinions.', 'Mostly about you. Mostly bad.'],
+        ['Best cabbages in all of World 1, these.', 'Only cabbages in all of World 1? Never checked.'],
+      ],
+    },
+  };
+  // (they talk the way the miners do: js/game/story-deep.js talk())
+  Object.assign(ERX.Story.deep.MINERS, VILLAGERS);
+  const villager = (id) => { const v = VILLAGERS[id]; return { name: v.name, color: '#ffd36a', plate: '#4a3a1a', voice: 'npc', pitch: v.pitch, speed: 44 }; };
+
+  /** Down in Normalton: a crater in the square, everyone staring... and guess who comes down after you. */
+  function* villageArrival(g) {
+    const L = g.level, p = g.player;
+    g.lockControls(true);
+    p.vx = 0;
+    g.saveProgress('village');
+    // everyone nearby jumps... and stares
+    for (const n of g.npcs) if (n.id !== 'slime' && Math.abs(n.x - p.cx) < 280) { n.bubble = 'bang'; n.bubbleT = 1.6; n.watch = p.cx; n.stay = true; }
+    sfx('villageGasp');
+    yield 1.5;
+    // the mayor hurries over
+    const mayor = g.npcs.find((n) => n.id === 'bramble');
+    if (mayor) {
+      mayor.goX = p.cx + (mayor.x < p.cx ? -28 : 28); mayor.goSpeed = 40;
+      yield () => (mayor.goX == null ? true : undefined);
+      yield 0.3;
+      yield* say(g, villager('bramble'), 'Oh! Oh my. Did you just... fall out of the SKY?');
+      yield* say(g, villager('bramble'), 'Ahem. WELCOME, traveller, to Normalton! A perfectly normal village.');
+      yield* say(g, villager('bramble'), 'Usually. A goose went missing last week. That was very exciting.');
+    }
+    // ...and then that whistle again
     const s = g.npcs.find((n) => n.id === 'slime');
     if (s) {
-      g.focusCamera(L.slimeX - 60, L.floorY - 40);
-      s.hidden = false; s.x = L.slimeX; s.y = L.floorY - 300; s.vy = 0; s.falling = true; s.goX = null; s.guard = true;
+      g.dialogue.close();
+      g.focusCamera(p.cx + 30, L.floorY - 40);
+      s.hidden = false; s.x = p.cx + 46; s.y = L.floorY - 320; s.vy = 0; s.falling = true; s.goX = null; s.guard = false;
       sfx('slimeWhistle');
       yield () => (s.falling ? undefined : true);
       sfx('crash');
       g.shake(4, 0.35);
+      if (mayor) { mayor.bubble = 'bang'; mayor.bubbleT = 1.2; mayor.watch = s.x; }
       yield 1.0;
-      yield* say(g, SLIME(), '...');
-      yield* say(g, SLIME(), 'You killed the boss.');
+      yield* say(g, SLIME(), '...You.');
+      yield* say(g, SLIME(), 'You pressed the button. The BIG RED ONE. With the label on it. That said DO NOT PRESS.');
       s.angry = true;
-      yield* say(g, SLIME(), 'Do you know how long that thing took to build? Do you have ANY idea?', { effect: 'shake' });
+      yield* say(g, SLIME(), 'That lift was a PROTOTYPE! It was meant to go up ONE FLOOR! ONE!', { effect: 'shake' });
+      yield* say(g, SLIME(), 'And before that you killed the BOSS! Do you know how long that thing took to build?!', { effect: 'shake' });
       s.angry = false;
-      yield* say(g, SLIME(), '...The thing with your eyes was very cool, though. Very cool.');
-      yield* say(g, SLIME(), 'Anyway. This passage. Behind me. It is NOT finished. Hard hat zone.');
-      yield* say(g, SLIME(), 'So turn around and go... somewhere. Not here. Not past me.');
+      yield* say(g, SLIME(), '...I rode up on the roof of the lift, by the way. Nobody asked. Nobody ever asks.');
+      yield* say(g, SLIME(), 'Fine. This is Normalton. Walk around. Talk to people. Buy a bun.');
+      yield* say(g, SLIME(), 'But the road out of the east gate is NOT finished. Hard hat zone. Not past me.');
       g.dialogue.close();
       g.releaseCamera();
+      s.goX = L.slimeX; s.guard = true;                    // off it hops, to the gate (and there it stays)
     }
+    for (const n of g.npcs) { n.stay = false; n.watch = null; }
+    g.music('normalton');
+    ERX.Audio.setAmbience('village');
+    g.banner = { title: 'NORMALTON', sub: 'Population: 31. Suspiciously normal.', t: 0, dur: 4.5 };
     g.lockControls(false);
   }
 
@@ -430,16 +575,16 @@
       ['The crystals hum. All night. I have not slept in WEEKS.'],
       ['You fell. Through. The FLOOR. Who even does that.'],
     ],
-    abyss: [
-      ['Still not finished. Still guarding. Still not happy about it.'],
-      ['You beat the boss. Fine. You want a medal? We do not HAVE medals.'],
-      ['The passage goes DOWN. Further. It is a hole. A hole that is NOT FINISHED.'],
-      ['Do NOT touch the lava. It is black. Black lava is the WORST lava.'],
-      ['You walked on the skulls. The skulls fell. You fell. You beat the boss.', 'Some of us just stand here. All day. In a hard hat.'],
+    village: [
+      ['Still not finished. The road, I mean. Not this sentence.'],
+      ['There is a CRATER in the SQUARE. The mayor wants a PLAQUE.'],
+      ['You went up four thousand metres in a prototype lift. And came back down without it.', 'Show-off.'],
+      ['The east road goes to... places. Unfinished places. Go and pet a chicken.'],
+      ['Somewhere out there is a goose called Gerald. He is not your problem.', 'He is also not past me.'],
     ],
   };
   function* slimeTalk(g, n) {
-    const lines = SLIME_LINES[g.levelId === 'abyss' ? 'abyss' : 'deeper'];
+    const lines = SLIME_LINES[g.levelId === 'village' ? 'village' : 'deeper'];
     n.talk = ((n.talk === undefined ? -1 : n.talk) + 1) % lines.length;
     n.angry = true;
     for (const line of lines[n.talk]) yield* say(g, SLIME(), line);
@@ -448,5 +593,5 @@
     g.lockControls(false);
   }
 
-  ERX.Story.world = { vrd, jump, world1Arrival, checkshot, theBars, deeperArrival, trialStart, trialDone, skullCollapse, abyssArrival, abyssBoss, abyssAfter, slimeTalk, EYES };
+  ERX.Story.world = { vrd, jump, world1Arrival, checkshot, theBars, deeperArrival, trialStart, trialDone, skullCollapse, abyssArrival, abyssBoss, abyssAfter, liftGo, villageArrival, slimeTalk, VILLAGERS, EYES };
 })(window.ERX = window.ERX || {});

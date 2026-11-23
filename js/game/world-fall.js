@@ -16,6 +16,11 @@
  *
  * Each world says what flies at you in WORLDS below (World 1: geese, birds
  * and paper planes above the clouds; hot-air balloons and kites below).
+ *
+ * Or you get there the other way (new ERX.SkyFall(g, 'village')): the lift out of the abyss
+ * blasts you UP out of the ground, past the clouds, slowing all the way, until you hang at
+ * the top for a moment... then the same fall, with bits of the lift raining down past you
+ * (they come from ABOVE: a warning marks where), and you land in Normalton.
  */
 (function (ERX) {
   'use strict';
@@ -26,12 +31,19 @@
 
   const WORLDS = {
     1: { name: 'WORLD 1', sub: 'A perfectly normal planet. Suspiciously normal.', level: 'world1', high: ['geese', 'bird', 'plane', 'bird'], low: ['balloon', 'kite', 'bird', 'plane', 'balloon'] },
+    // the lift out of the abyss (js/game/sky-launch.js) doesn't stop at the top: it BLASTS you out, way up past the
+    // clouds... and then you fall, with bits of the lift coming down all round you, into Normalton
+    village: { name: 'WORLD 1', sub: 'Back on the surface. Very, very far above it.', level: 'village', launch: true, high: ['debris', 'geese', 'bird', 'debris', 'plane', 'bird'], low: ['balloon', 'debris', 'kite', 'bird', 'debris', 'balloon'] },
   };
 
   // how long each part lasts (seconds)
-  const T = { black: 2, portal: 1.6, voidFall: 3.2, bright: 1.7, crack: 1.1, shatter: 0.6, sky: 13, land: 1.3, rise: 0.4 };
+  const T = { black: 2, portal: 1.6, voidFall: 3.2, bright: 1.7, crack: 1.1, shatter: 0.6, up: 3.0, apex: 1.7, sky: 13, land: 1.3, rise: 0.4 };
   const ORDER = ['black', 'portal', 'voidFall', 'bright', 'crack', 'shatter', 'sky', 'land', 'rise'];
+  // ...or, blasted up into the sky first: up (slowing all the way), the moment at the top, then down
+  const LAUNCH_ORDER = ['up', 'apex', 'sky', 'land', 'rise'];
+  const UP0 = 520;                   // how high you are as you shoot into view (px above the ground)
   const VMIN = 120, TAU = 1.5;       // fall speed: starts at VMIN and builds to terminal velocity
+  const ease = (k) => k * k * (3 - 2 * k);
   const fallDist = (t, vmax) => VMIN * t + (vmax - VMIN) * (t - TAU * (1 - Math.exp(-t / TAU)));
   const vmaxFor = (H, dur) => VMIN + (H - VMIN * dur) / (dur - TAU * (1 - Math.exp(-dur / TAU)));
 
@@ -87,8 +99,22 @@
   const PLANE = [[-6, 0, 12, 1, '#ffffff'], [-4, -1, 8, 1, '#eef2fa'], [-5, 1, 8, 1, '#c8d0e0'], [-1, -2, 3, 1, '#ffffff'], [-6, 2, 4, 1, '#aab4c8']];
   const STRIPES = [['#ff5a5a', '#ffd34d', '#ff5a5a', '#5ab0ff'], ['#7ad85a', '#ffffff', '#7ad85a', '#ff8ad8'], ['#b87aff', '#ffd34d', '#ff9a3a', '#b87aff'], ['#5ab0ff', '#ffffff', '#ff5a5a', '#ffffff']];
   const KITES = [['#ff4a6a', '#ffd34d'], ['#5ab0ff', '#ffffff'], ['#7ad85a', '#ff9a3a'], ['#b87aff', '#6af0d8']];
+  const PARTS = ['beam', 'panel', 'gear', 'beam', 'cone', 'panel', 'button', 'gear'];
+
+  /** A piece of the lift (or of its building site), spinning: a girder, a bit of the cage, a cog, a cone... the button. */
+  function drawPart(ctx, part, x, y, rot) {
+    ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.rotate(rot);
+    const r = (dx, dy, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(dx, dy, w, h); };
+    if (part === 'beam') { r(-9, -3, 18, 6, '#1a1424'); r(-8, -2, 16, 4, '#c8a020'); r(-8, -2, 16, 1, '#f4d860'); for (let i = -6; i <= 6; i += 4) r(i, -1, 2, 2, '#5a4a10'); }
+    else if (part === 'panel') { r(-7, -7, 14, 14, '#1a1424'); r(-6, -6, 12, 12, '#d8b020'); r(-4, -4, 8, 8, '#2a2a34'); for (let i = -3; i <= 3; i += 3) { r(i, -4, 1, 8, '#8a8a98'); r(-4, i, 8, 1, '#8a8a98'); } }
+    else if (part === 'gear') { for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; r(Math.round(Math.cos(a) * 5) - 1, Math.round(Math.sin(a) * 5) - 1, 3, 3, '#5a5a6a'); } r(-4, -4, 8, 8, '#8a8a9a'); r(-3, -5, 6, 10, '#8a8a9a'); r(-5, -3, 10, 6, '#8a8a9a'); r(-1, -1, 2, 2, '#2a2a34'); }
+    else if (part === 'cone') { for (let yy = 0; yy < 10; yy++) { const hw = Math.round(yy * 0.4); r(-hw, -6 + yy, hw * 2 + 1, 1, yy === 4 || yy === 5 ? '#f4f0e8' : '#f07a2a'); } r(-5, 4, 11, 2, '#c85a1a'); }
+    else if (part === 'button') { r(-5, -2, 10, 7, '#1a1424'); r(-4, -1, 8, 5, '#8a8a98'); r(-3, -5, 6, 4, '#1a1424'); r(-2, -4, 4, 3, '#e83a2a'); r(-1, -4, 1, 1, '#ffb0a0'); }
+    ctx.restore();
+  }
 
   function drawObstacle(ctx, o, x, y) {
+    if (o.kind === 'debris') { drawPart(ctx, o.part, x, y, o.rot || 0); return; }
     if (o.kind === 'bird' || o.kind === 'goose') {
       const f = o.gone ? 2 : Math.floor(o.t * (o.kind === 'goose' ? 8 : 12) + o.ph) % 3;
       spr(ctx, x, y, o.dir, (o.kind === 'goose' ? GOOSE : BIRD)[f === 2 ? 1 : f === 1 ? 2 : 0]);
@@ -175,7 +201,8 @@
       this.g = g;
       this.def = WORLDS[n] || WORLDS[1];
       this.n = n;
-      this.phase = 'black';
+      this.order = this.def.launch ? LAUNCH_ORDER : ORDER;
+      this.phase = this.order[0];
       this.pt = 0;          // time in this phase
       this.t = 0;           // total
       const L = g.level, vw = g.view.width, vh = g.view.height;
@@ -205,6 +232,16 @@
       ERX.Skyfall = { wind: 0, flap: 1 };
       ERX.Audio.cutMusic();
       ERX.Audio.setAmbience(null);
+      if (this.def.launch) {
+        // shot up out of the ground (the lift's blast still white on the screen), bits of the lift flying up with you
+        this.alt = UP0; this.upV = this.v0 = (2 * (this.H - UP0)) / T.up;
+        const R = (a, b) => a + Math.random() * (b - a);
+        this.pieces = Array.from({ length: 11 }, (_, i) => ({ part: PARTS[i % PARTS.length], x: this.x + R(-46, 46), alt: UP0 - R(10, 90), v: this.v0 * R(0.82, 1.06), grav: (this.v0 / T.up) * R(0.92, 1.12), vx: R(-60, 60), rot: R(0, 6), vr: R(-7, 7) }));
+        g.flashT = Math.max(g.flashT || 0, 0.45);
+        ERX.Audio.setAmbience('skyfall');
+        ERX.Skyfall.wind = 1;
+        sfx('launchWhoosh');
+      }
       this.place();
     }
 
@@ -242,12 +279,14 @@
       const cam = g.camera;
       cam.x = U.clamp(U.lerp(cam.x, p.cx - vw / 2, 0.12), 0, Math.max(0, L.pw - vw));
       if (this.phase === 'black' || this.phase === 'portal' || this.phase === 'voidFall' || this.phase === 'bright' || this.phase === 'crack') cam.x = U.clamp(p.cx - vw / 2, 0, Math.max(0, L.pw - vw));
-      cam.y = Math.min(p.y - vh * 0.32, L.ph - vh);
+      // going up you look up (you're low on the screen); at the top the view swings round to look down
+      const frame = this.phase === 'up' ? 0.62 : this.phase === 'apex' ? U.lerp(0.62, 0.32, ease(Math.min(1, this.pt / (T.apex * 0.8)))) : 0.32;
+      cam.y = Math.min(p.y - vh * frame, L.ph - vh);
     }
 
     next() {
-      const i = ORDER.indexOf(this.phase);
-      this.phase = ORDER[i + 1];
+      const i = this.order.indexOf(this.phase);
+      this.phase = this.order[i + 1];
       this.pt = 0;
       this.enter(this.phase);
     }
@@ -262,6 +301,8 @@
       if (ph === 'land') this.land();
       if (ph === 'sky') ERX.FX.shake(2, 0.3);
       if (ph === 'rise') sfx('getUp');
+      if (ph === 'apex') sfx('skyHang');                                                  // ...and stop. Way up here. Uh oh.
+      if (ph === 'sky' && this.def.launch) { ERX.Audio.playMusic('skyfall'); sfx('launchWhoosh'); }   // gravity remembers you
     }
 
     update(dt) {
@@ -271,11 +312,11 @@
       if (this.pt >= T[this.phase]) { if (this.phase === 'rise') return this.finish(); if (this.phase !== 'sky') this.next(); }
       const S = ERX.Skyfall;
       // ---- steering (the void part only drifts you a little; in the sky you really move)
-      const k = K(), left = k.isDown('moveLeft'), right = k.isDown('moveRight'), inSky = this.phase === 'sky';
+      const k = K(), left = k.isDown('moveLeft'), right = k.isDown('moveRight'), inSky = this.phase === 'sky' || this.phase === 'up' || this.phase === 'apex';
       if (this.phase === 'voidFall' || this.phase === 'bright' || inSky) {
         const want = (right ? 1 : 0) - (left ? 1 : 0);
         this.dashCd = Math.max(0, this.dashCd - dt); this.dashT = Math.max(0, this.dashT - dt);
-        if (inSky && k.wasPressed('dash') && this.dashCd <= 0 && want) { this.dashT = 0.2; this.dashCd = 0.7; this.vx = want * 280; sfx('dash'); }
+        if (this.phase === 'sky' && k.wasPressed('dash') && this.dashCd <= 0 && want) { this.dashT = 0.2; this.dashCd = 0.7; this.vx = want * 280; sfx('dash'); }
         if (this.dashT <= 0) this.vx = want ? U.approach(this.vx, want * 135, 7, dt) : U.approach(this.vx, 0, 4, dt);
         if (inSky) {
           const L = g.level;
@@ -291,9 +332,24 @@
       if (this.phase === 'portal') S.wind = 0.15;
       else if (this.phase === 'voidFall') S.wind = 0.35;
       else if (this.phase === 'bright' || this.phase === 'crack') S.wind = 0.45 + this.pt * 0.1;
+      else if (this.phase === 'up') S.wind = this.inCloud ? 0.35 : U.clamp(0.15 + (this.upV / this.v0) * 0.85, 0, 1);
+      else if (this.phase === 'apex') S.wind = 0.06;
       else if (inSky) S.wind = this.inCloud ? 0.35 : U.clamp(0.4 + (this.speed() / this.vmax) * 0.6, 0, 1);
+      // ---- going up: slowing all the way, until you hang there at the top
+      if (this.phase === 'up' || this.phase === 'apex') {
+        if (this.phase === 'up') { const a = this.v0 / T.up, t = Math.min(this.pt, T.up); this.alt = UP0 + this.v0 * t - 0.5 * a * t * t; this.upV = Math.max(0, this.v0 - a * t); }
+        else { this.alt = this.H + Math.sin(this.pt * 1.6) * 2; this.upV = 0; }
+        const ca = g.level.cloudAlt || 1750, inC = this.alt < ca + 10 && this.alt > ca - 160;
+        if (inC && !this.inCloud) { sfx('cloudPuff'); for (let i = 0; i < 10; i++) this.puffs.push({ x: Math.random() * this.vw, y: -Math.random() * 120, r: 30 + Math.random() * 50 }); }
+        this.inCloud = inC;
+      }
+      // the bits of the lift: up with you, then (slower than you, or faster) away
+      if (this.pieces) {
+        for (const pc of this.pieces) { pc.v -= pc.grav * dt; if (pc.v < -this.vmax) pc.v = -this.vmax; pc.alt += pc.v * dt; pc.x += pc.vx * dt; pc.rot += pc.vr * dt; }
+        this.pieces = this.pieces.filter((pc) => Math.abs(pc.alt - this.alt) < 520);
+      }
       // ---- falling through the sky
-      if (inSky) {
+      if (this.phase === 'sky') {
         this.alt = Math.max(0, this.H - fallDist(this.pt, this.vmax));
         const ca = g.level.cloudAlt || 1750, inC = this.alt < ca + 10 && this.alt > ca - 160;
         if (inC && !this.inCloud) { sfx('cloudPuff'); for (let i = 0; i < 10; i++) this.puffs.push({ x: Math.random() * this.vw, y: this.vh + Math.random() * 120, r: 30 + Math.random() * 50 }); }
@@ -302,12 +358,13 @@
         if (this.alt <= 0) this.next();
       }
       // wind streaks + cloud puffs (screen space)
-      const sp = this.phase === 'sky' ? this.speed() : this.phase === 'voidFall' ? 240 : this.phase === 'bright' ? 360 : 120;
-      for (const s of this.streaks) { s.y -= sp * s.sp * dt * 1.6; if (s.y < -s.len) { s.y = this.vh + Math.random() * 30; s.x = Math.random() * this.vw; } }
+      // (going up, everything streams DOWN the screen)
+      const sp = this.phase === 'sky' ? this.speed() : this.phase === 'up' ? -this.upV : this.phase === 'apex' ? 0 : this.phase === 'voidFall' ? 240 : this.phase === 'bright' ? 360 : 120;
+      for (const s of this.streaks) { s.y -= sp * s.sp * dt * 1.6; if (s.y < -s.len - 40) { s.y = this.vh + Math.random() * 30; s.x = Math.random() * this.vw; } else if (s.y > this.vh + 40) { s.y = -s.len - Math.random() * 30; s.x = Math.random() * this.vw; } }
       for (const s of this.stars) { s.y -= sp * s.z * dt * 1.2; if (s.y < -20) { s.y = this.vh + Math.random() * 20; s.x = Math.random() * this.vw; } }
       for (const n of this.neb) { n.y -= sp * 0.15 * dt; if (n.y < -n.r) { n.y = this.vh + n.r; n.x = Math.random() * this.vw; } }
       for (const pf of this.puffs) pf.y -= sp * 1.3 * dt;
-      this.puffs = this.puffs.filter((pf) => pf.y > -pf.r * 2);
+      this.puffs = this.puffs.filter((pf) => pf.y > -pf.r * 2 && pf.y < this.vh + pf.r * 2 + 130);
       if (this.phase === 'crack') { const i = Math.floor(this.pt / (T.crack / 3)); if (i !== this._ci && i < 3) { this._ci = i; sfx('lightCrack', { i }); ERX.FX.shake(1 + i, 0.15); } }
       if (this.phase !== 'land' && this.phase !== 'rise') this.place();
     }
@@ -326,6 +383,8 @@
       const box = { x: p.x + 1, y: p.y + 2, w: p.w - 2, h: p.h - 4 };
       for (const o of this.obs) {
         o.t += dt;
+        // a piece of the lift: falling FASTER than you, from above (it whistles as it comes)
+        if (o.kind === 'debris') { o.rot += o.vr * dt; if (!o.gone) o.vy = this.speed() + o.rel; if (!o.whistled && o.y > cam.y - 90) { o.whistled = true; sfx('debrisWhistle', { minGap: 0.25 }); } }
         if (o.gone) { o.vy += 300 * dt; o.alarm = 0; }
         o.x += o.vx * dt; o.y += o.vy * dt;
         if (o.kind === 'bird' || o.kind === 'goose') o.y += Math.sin(o.t * 3 + o.ph) * 8 * dt;
@@ -335,7 +394,7 @@
         const hit = box.x < o.x + hb.x + hb.w && box.x + box.w > o.x + hb.x && box.y < o.y + hb.y + hb.h && box.y + box.h > o.y + hb.y;
         if (hit) this.hit(o);
       }
-      this.obs = this.obs.filter((o) => o.y > cam.y - 140 && o.y < cam.y + vh + 400 && o.x > -400 && o.x < L.pw + 400);
+      this.obs = this.obs.filter((o) => o.y > cam.y - (o.kind === 'debris' ? 300 : 140) && o.y < cam.y + vh + 400 && o.x > -400 && o.x < L.pw + 400);
     }
 
     spawn(kind, y) {
@@ -359,6 +418,9 @@
       } else if (kind === 'kite') {
         const dir = Math.random() < 0.5 ? -1 : 1;
         add({ kind: 'kite', x: U.clamp(aim, cam.x + 16, cam.x + vw - 16), y, vx: dir * U.lerp(8, 22, Math.random()), dir, pal: Math.floor(Math.random() * KITES.length), hb: { x: -6, y: -9, w: 12, h: 18 } });
+      } else if (kind === 'debris') {
+        // from ABOVE: it starts out of sight (a warning marks where), aimed near you
+        add({ kind: 'debris', x: U.clamp(aim + (Math.random() - 0.5) * 40, cam.x + 14, cam.x + vw - 14), y: cam.y - U.lerp(150, 190, Math.random()), vx: (Math.random() - 0.5) * 16, rel: U.lerp(130, 175, Math.random()), dir: 1, part: PARTS[Math.floor(Math.random() * PARTS.length)], rot: Math.random() * 6, vr: (Math.random() < 0.5 ? -1 : 1) * U.lerp(4, 9, Math.random()), hb: { x: -6, y: -6, w: 12, h: 12 } });
       }
     }
 
@@ -374,6 +436,7 @@
       if (o.kind === 'bird' || o.kind === 'goose') { sfx('birdSquawk'); for (let i = 0; i < 8; i++) g.fx.add({ x: o.x, y: o.y, vx: U.lerp(-60, 60, Math.random()), vy: U.lerp(-80, 20, Math.random()), ay: 60, life: 1, color: Math.random() < 0.5 ? '#e8e0d4' : '#4a4458', size: 1, fadeOut: 0.4, wobble: 12, wobbleRate: 6 }); }
       if (o.kind === 'balloon') { sfx('balloonBoing'); o.gone = false; o.vx = -this.vx * 0.3; o.vy = -60; this.vx *= 1.4; }
       if (o.kind === 'kite') { o.vx = this.vx * -0.5; }
+      if (o.kind === 'debris') { sfx('debrisClank'); o.vx = -this.vx * 0.4; o.vy = this.speed() - 60; o.vr *= 2; }
     }
 
     // ---------------------------------------------------------- landing
@@ -387,6 +450,8 @@
       g.flashT = Math.max(g.flashT || 0, chaos ? 0.2 : 0.12);
       sfx('landSlam');
       if (chaos) sfx('crash');
+      if (L.onLand) L.onLand(g, x);       // (Normalton keeps the crater)
+      this.pieces = null;
       if (el && ERX.ElementSfx) ERX.ElementSfx.boom(el.id, chaos ? 160 : 120, false);
       g.dust(x, y, chaos ? 40 : 26);
       if (el) {
@@ -419,8 +484,17 @@
     renderWorld(ctx, cam) {
       const g = this.g, p = g.player, ox = -cam.ix, oy = -cam.iy;
       for (const o of this.obs) drawObstacle(ctx, o, o.x + ox, o.y + oy);
-      if (this.phase !== 'sky' && this.phase !== 'shatter' && this.phase !== 'land' && this.phase !== 'rise') return;
+      if (this.pieces) for (const pc of this.pieces) drawPart(ctx, pc.part, pc.x + ox, g.level.floorY - pc.alt + oy, pc.rot);
+      if (this.phase !== 'sky' && this.phase !== 'shatter' && this.phase !== 'land' && this.phase !== 'rise' && this.phase !== 'up' && this.phase !== 'apex') return;
       const t = this.t, x = p.cx + ox, y = p.feet + oy;
+      if (this.phase === 'up' || this.phase === 'apex') {
+        // flung up end over end, then arms out... and at the top, hanging there for a moment, looking down
+        const k = this.phase === 'up' ? this.pt / T.up : 1, flip = this.phase === 'up' && k < 0.55;
+        const j = flip ? tumblePose(t) : fallPose(t, this.vx, this.phase === 'apex' && this.pt > 0.9);
+        const ang = flip ? (k / 0.55) * Math.PI * 4 : U.clamp(this.vx / 300, -0.4, 0.4) + (this.phase === 'apex' ? Math.sin(this.pt * 2.2) * 0.12 : 0);
+        drawBody(ctx, p.look, j, x, y + Math.sin(t * 2.3) * 1.5, p.facing, ang, 1);
+        return;
+      }
       if (this.phase === 'land' || this.phase === 'rise') {
         const W = ERX.AwkHelp, kneel = W.IDLE.kneel(t);
         const j = this.phase === 'land' ? kneel : lerpJ(kneel, ERX.PlayerSide.STAND, W.ease(this.pt / T.rise));
@@ -465,27 +539,52 @@
         return;
       }
       if (ph === 'shatter') this.drawShards(ctx, vw, vh, k);
+      if (ph === 'up' || ph === 'apex') {
+        // rushing up: streaks pouring down past you, the clouds as you punch up through them; then the stillness at the top
+        if (ph === 'up') this.drawStreaks(ctx, vw, vh, 0.1 + (this.upV / this.v0) * 0.22, '#ffffff', 0.7 + this.upV / 600);
+        const ca = this.g.level.cloudAlt || 1750, d = Math.abs(this.alt - (ca - 70)), fog = U.clamp(1 - d / 120, 0, 1);
+        if (fog > 0) { ctx.fillStyle = 'rgba(240,246,255,' + (fog * 0.88).toFixed(3) + ')'; ctx.fillRect(0, 0, vw, vh); }
+        for (const pf of this.puffs) { const gr = ctx.createRadialGradient(pf.x, pf.y, 2, pf.x, pf.y, pf.r); gr.addColorStop(0, 'rgba(255,255,255,0.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = gr; ctx.fillRect(pf.x - pf.r, pf.y - pf.r, pf.r * 2, pf.r * 2); }
+        if (ph === 'apex') this.drawTitle(ctx, vw, vh, U.clamp(Math.min((this.pt - 0.25) / 0.5, 1), 0, 1));
+        return;
+      }
       if (ph === 'sky') {
-        if (this.pt < 0.35) { ctx.fillStyle = 'rgba(255,255,255,' + (1 - this.pt / 0.35).toFixed(3) + ')'; ctx.fillRect(0, 0, vw, vh); }
+        if (this.pt < 0.35 && !this.def.launch) { ctx.fillStyle = 'rgba(255,255,255,' + (1 - this.pt / 0.35).toFixed(3) + ')'; ctx.fillRect(0, 0, vw, vh); }
+        // something coming down from above: a warning where it'll come into view
+        const cam = this.g.camera;
+        for (const o of this.obs) {
+          if (o.kind !== 'debris' || o.gone || o.y > cam.y - 4) continue;
+          // a warning sign at the top of the screen, right above where it'll come down, and an arrow bobbing under it
+          const sx = Math.round(o.x - cam.x), on = Math.floor(this.t * 8) % 2 === 0, near = U.clamp(1 - (cam.y - o.y) / 200, 0.55, 1), bob = Math.round(Math.sin(this.t * 14) * 1.5);
+          ctx.globalAlpha = near;
+          for (let r = 0; r < 12; r++) { const hw = Math.round(r * 0.62); ctx.fillStyle = '#1a1424'; ctx.fillRect(sx - hw - 1, 3 + r, hw * 2 + 3, 1); }
+          for (let r = 1; r < 11; r++) { const hw = Math.round((r - 1) * 0.62); ctx.fillStyle = on ? '#ff5a3a' : '#ffd34d'; ctx.fillRect(sx - hw, 3 + r, hw * 2 + 1, 1); }
+          ctx.fillStyle = '#1a1424'; ctx.fillRect(sx, 7, 1, 4); ctx.fillRect(sx, 12, 1, 1);
+          ctx.fillStyle = on ? '#ff5a3a' : '#ffd34d'; ctx.fillRect(sx, 18 + bob, 1, 5); ctx.fillRect(sx - 2, 21 + bob, 5, 1); ctx.fillRect(sx - 1, 22 + bob, 3, 1); ctx.fillRect(sx, 23 + bob, 1, 1);
+          ctx.globalAlpha = 1;
+        }
         this.drawStreaks(ctx, vw, vh, 0.12 + (this.speed() / this.vmax) * 0.14, '#ffffff', 0.7 + this.speed() / 500);
         // inside the clouds: white everywhere, puffs streaming past
         const ca = this.g.level.cloudAlt || 1750, d = Math.abs(this.alt - (ca - 70)), fog = U.clamp(1 - d / 120, 0, 1);
         if (fog > 0) { ctx.fillStyle = 'rgba(240,246,255,' + (fog * 0.88).toFixed(3) + ')'; ctx.fillRect(0, 0, vw, vh); }
         for (const pf of this.puffs) { const gr = ctx.createRadialGradient(pf.x, pf.y, 2, pf.x, pf.y, pf.r); gr.addColorStop(0, 'rgba(255,255,255,0.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = gr; ctx.fillRect(pf.x - pf.r, pf.y - pf.r, pf.r * 2, pf.r * 2); }
         if (this.invT > 0.9) { ctx.fillStyle = 'rgba(255,60,40,' + ((this.invT - 0.9) * 1.2).toFixed(3) + ')'; ctx.fillRect(0, 0, vw, vh); }
-        // the world's title card, while you take in the view
-        const tk = U.clamp(Math.min((this.pt - 0.5) / 0.6, (4.4 - this.pt) / 0.8), 0, 1);
-        if (tk > 0) {
-          const F = ERX.Font, cy = Math.round(vh * 0.07);
-          ctx.globalAlpha = tk;
-          F.draw(ctx, this.def.name, Math.round(vw / 2), cy, { scale: 3, color: '#ffffff', outline: '#1a1424', shadow: '#2a4a9a', shadowOffset: 2, align: 'center' });
-          F.draw(ctx, this.def.sub, Math.round(vw / 2), cy + 26, { color: '#eef4ff', outline: '#1a1424', align: 'center' });
-          ctx.globalAlpha = 1;
-        }
+        // the world's title card, while you take in the view (blasted up into it: it's been up since the top)
+        const tk = this.def.launch ? U.clamp((2.6 - this.pt) / 0.8, 0, 1) : U.clamp(Math.min((this.pt - 0.5) / 0.6, (4.4 - this.pt) / 0.8), 0, 1);
+        this.drawTitle(ctx, vw, vh, tk);
         // how to dodge, for the first few seconds
         const hk = U.clamp(Math.min((this.pt - 1) / 0.4, (5.5 - this.pt) / 0.6), 0, 1);
         if (hk > 0) { ctx.globalAlpha = hk; ERX.Font.draw(ctx, ERX.keyText('{moveLeft} {moveRight} DODGE     {dash} SWERVE'), Math.round(vw / 2), vh - 20, { color: '#ffd34d', outline: '#1a1424', align: 'center' }); ctx.globalAlpha = 1; }
       }
+    }
+
+    drawTitle(ctx, vw, vh, tk) {
+      if (tk <= 0) return;
+      const F = ERX.Font, cy = Math.round(vh * 0.07);
+      ctx.globalAlpha = tk;
+      F.draw(ctx, this.def.name, Math.round(vw / 2), cy, { scale: 3, color: '#ffffff', outline: '#1a1424', shadow: '#2a4a9a', shadowOffset: 2, align: 'center' });
+      F.draw(ctx, this.def.sub, Math.round(vw / 2), cy + 26, { color: '#eef4ff', outline: '#1a1424', align: 'center' });
+      ctx.globalAlpha = 1;
     }
 
     drawVoid(ctx, vw, vh, t, starA) {

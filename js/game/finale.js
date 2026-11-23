@@ -793,7 +793,7 @@
       this.dust = [];
       // that last hit knocks it back (it needs room to come at you): it skids to about ROOM away,
       // and if there's a wall behind it, you give a little ground too
-      const lo = 4 * 16, hi = g.level.pw - 4 * 16, dir = Math.sign(boss.cx - p.cx) || 1;
+      const L = g.level, lo = (L.arenaX0 !== undefined ? L.arenaX0 : 3 * 16) + 16, hi = (L.arenaX1 !== undefined ? L.arenaX1 : L.pw - 3 * 16) - 16, dir = Math.sign(boss.cx - p.cx) || 1;
       this.bossTo = boss.x; this.youTo = p.x;
       if (Math.abs(boss.cx - p.cx) < ROOM) {
         const bx = U.clamp(p.cx + dir * ROOM, lo, hi);
@@ -807,7 +807,7 @@
       this.fallV = [0, 0];
       // where the camera holds: between the two of you
       const mid = (this.bossTo + boss.w / 2 + this.youTo + p.w / 2) / 2;
-      this.camX = U.clamp(mid - g.view.width / 2, 0, Math.max(0, g.level.pw - g.view.width));
+      this.camX = U.clamp(mid - g.view.width / 2, 0, Math.max(0, (L.camRight !== undefined ? Math.min(L.pw, L.camRight) : L.pw) - g.view.width));
     }
     enter(ph) {
       this.phase = ph; this.pt = 0;

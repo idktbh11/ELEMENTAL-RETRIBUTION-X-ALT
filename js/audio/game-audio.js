@@ -218,6 +218,24 @@
 
   Object.assign(ERX.MusicTracks, {
     // THE TRIAL: war drums, brass, strings sawing away underneath, a choir. Prove yourself.
+    // NORMALTON: a perfectly normal village tune. A happy flute, a bouncing bass, a plucky arp, a gentle shuffle. D major.
+    normalton: {
+      title: 'Population: 31',
+      bpm: 104, stepsPerBar: 16, swing: 0.16, restEvery: 4,
+      chords: 'D G D A D G A D Bm G D A G A D D',
+      lead: {
+        inst: 'flute', vol: 0.05, res: 8,
+        notes:
+          'F#5 - A5 . D6 - A5 . | B5 - G5 . D5 - . . | F#5 - A5 . D6 - F#6 . | E6 - - - - - . . | ' +
+          'F#5 - E5 . D5 - F#5 . | G5 - B5 . D6 - B5 . | A5 - C#6 . E6 - C#6 . | D6 - - - - - . . | ' +
+          'B5 - A5 . F#5 - D5 . | G5 - - . B5 - D6 . | F#5 - - . A5 - F#5 . | E5 - - - A5 - . . | ' +
+          'B5 - G5 . E5 - G5 . | A5 - C#6 . E6 - G6 . | F#6 - E6 . D6 - A5 . | D6 - - - - - . .',
+      },
+      bass: { octave: 2, vol: 0.16, pattern: 'R . . 5 . . R . 8 . . 5 . R . .' },
+      arp: { octave: 4, vol: 0.012, wave: 'triangle', pattern: [0, null, 2, null, 1, null, 2, null, 0, null, 2, null, 1, null, 3, null] },
+      pad: { octave: 3, vol: 0.011, inst: 'strings' },
+      drums: { vol: 0.34, pattern: 'k . h . s . h h k . h k s . h .' },
+    },
     trial: {
       title: 'Six Waves',
       bpm: 132, stepsPerBar: 16, swing: 0, restEvery: 0,
@@ -750,6 +768,76 @@
       a.tone(d, { wave: 'sawtooth', freq: 110, freqEnd: 180, slideTime: 0.5, t, dur: 1.4, vol: 0.12, attack: 0.1, release: 0.5, vibrato: 10, vibratoRate: 20 });
       a.tone(d, { wave: 'sawtooth', freq: 116.5, freqEnd: 190, slideTime: 0.5, t, dur: 1.4, vol: 0.08, attack: 0.1, release: 0.5, vibrato: 12, vibratoRate: 24 });
       a.noiseBurst(d, { t, dur: 1.4, vol: 0.12, type: 'bandpass', freq: 900, freqEnd: 400, Q: 0.8, attack: 0.15, release: 0.8 });
+    },
+    // ---- the lift out of the abyss (js/game/sky-launch.js), the launch and the fall (js/game/world-fall.js), Normalton
+    liftButton(a, d, t) {     // click... beep boop
+      a.noiseBurst(d, { t, dur: 0.02, vol: 0.14, type: 'bandpass', freq: 2600, Q: 3, release: 0.02 });
+      a.tone(d, { wave: 'square', freq: 880, t: t + 0.08, dur: 0.1, vol: 0.045, release: 0.04 });
+      a.tone(d, { wave: 'square', freq: 660, t: t + 0.22, dur: 0.16, vol: 0.045, release: 0.05 });
+    },
+    liftClunk(a, d, t) {      // the gate slams down: CLANG
+      a.tone(d, { wave: 'sine', freq: 150, freqEnd: 55, t, dur: 0.3, vol: 0.24, release: 0.15 });
+      a.noiseBurst(d, { t, dur: 0.14, vol: 0.16, type: 'bandpass', freq: 1300, Q: 1.2, release: 0.15 });
+      for (const f of [311, 467, 733, 1046]) a.tone(d, { wave: 'triangle', freq: f, t: t + 0.01, dur: 0.02, vol: 0.035, attack: 0.002, release: 0.7 });
+    },
+    liftHum(a, d, t) {        // the motor, working hard; the chains clinking
+      a.tone(d, { wave: 'sawtooth', freq: 55, t, dur: 0.5, vol: 0.05, attack: 0.04, release: 0.1, vibrato: 2, vibratoRate: 12 });
+      a.tone(d, { wave: 'square', freq: 110, t, dur: 0.5, vol: 0.015, attack: 0.04, release: 0.1 });
+      a.noiseBurst(d, { t: t + 0.1, dur: 0.02, vol: 0.04, type: 'bandpass', freq: 3200, Q: 4, release: 0.04 });
+    },
+    liftLurch(a, d, t) {      // a jolt, and the motor groans up a gear
+      a.tone(d, { wave: 'sine', freq: 90, freqEnd: 40, t, dur: 0.3, vol: 0.24, release: 0.2 });
+      a.tone(d, { wave: 'sawtooth', freq: 70, freqEnd: 160, slideTime: 0.7, t, dur: 0.7, vol: 0.06, attack: 0.05, release: 0.2 });
+      a.noiseBurst(d, { t, dur: 0.3, vol: 0.1, type: 'bandpass', freq: 700, Q: 1, release: 0.25 });
+    },
+    liftRattle(a, d, t) {     // everything rattling
+      for (let i = 0; i < 4; i++) a.noiseBurst(d, { t: t + i * 0.045 + Math.random() * 0.02, dur: 0.015, vol: 0.06, type: 'bandpass', freq: rand(1600, 3400), Q: 3, release: 0.03 });
+      a.tone(d, { wave: 'sawtooth', freq: rand(80, 95), t, dur: 0.28, vol: 0.04, release: 0.06 });
+    },
+    liftAlarm(a, d, t) {      // an old electric alarm bell: brrrrrring
+      for (let i = 0; i < 9; i++) a.tone(d, { wave: 'triangle', freq: i % 2 ? 1750 : 1400, t: t + i * 0.035, dur: 0.028, vol: 0.035, attack: 0.002, release: 0.05 });
+    },
+    liftSpark(a, d, t) {      // sparks screaming off the rails
+      a.noiseBurst(d, { t, dur: 0.06, vol: 0.06, type: 'highpass', freq: 4200, release: 0.05 });
+      a.tone(d, { wave: 'square', freq: rand(2400, 3600), freqEnd: rand(800, 1200), t, dur: 0.05, vol: 0.012, release: 0.03 });
+    },
+    liftRoar(a, d, t) {       // MUCH faster: the roar of it all, rising
+      a.noiseBurst(d, { t, dur: 1.6, vol: 0.16, type: 'lowpass', freq: 220, freqEnd: 3600, Q: 0.8, attack: 0.3, release: 0.2 });
+      a.tone(d, { wave: 'sawtooth', freq: 70, freqEnd: 320, slideTime: 1.6, t, dur: 1.6, vol: 0.07, attack: 0.2, release: 0.1, vibrato: 6, vibratoRate: 24 });
+      a.tone(d, { wave: 'sine', freq: 400, freqEnd: 1800, slideTime: 1.6, t, dur: 1.6, vol: 0.02, attack: 0.3, release: 0.1 });
+    },
+    liftBlast(a, d, t) {      // ...and out the top. BOOM.
+      a.tone(d, { wave: 'sine', freq: 90, freqEnd: 24, slideTime: 1.6, t, dur: 1.6, vol: 0.34, release: 0.8 });
+      a.noiseBurst(d, { t, dur: 1.2, vol: 0.26, type: 'lowpass', freq: 2400, freqEnd: 120, release: 1.0 });
+      a.noiseBurst(d, { t, dur: 0.08, vol: 0.2, type: 'highpass', freq: 2600, release: 0.12 });
+      a.noiseBurst(d, { t: t + 0.05, dur: 1.4, vol: 0.12, type: 'bandpass', freq: 2600, freqEnd: 500, Q: 0.7, attack: 0.05, release: 0.9 });
+    },
+    launchWhoosh(a, d, t) {   // rushing air
+      a.noiseBurst(d, { t, dur: 0.9, vol: 0.14, type: 'bandpass', freq: 3000, freqEnd: 400, Q: 0.8, attack: 0.04, release: 0.6 });
+      a.noiseBurst(d, { t, dur: 0.6, vol: 0.08, type: 'lowpass', freq: 600, release: 0.5 });
+    },
+    skyHang(a, d, t) {        // at the very top: the wind drops away... uh oh
+      a.noiseBurst(d, { t, dur: 0.7, vol: 0.06, type: 'bandpass', freq: 900, freqEnd: 300, Q: 0.8, release: 0.6 });
+      a.tone(d, { wave: 'triangle', freq: 784, t: t + 0.35, dur: 0.16, vol: 0.05, release: 0.2 });
+      a.tone(d, { wave: 'triangle', freq: 523, t: t + 0.6, dur: 0.3, vol: 0.05, release: 0.35, vibrato: 6, vibratoRate: 6 });
+    },
+    debrisWhistle(a, d, t) {  // something heavy, falling past, fast
+      a.tone(d, { wave: 'sine', freq: 1500, freqEnd: 520, slideTime: 0.7, t, dur: 0.7, vol: 0.03, attack: 0.05, release: 0.1 });
+      a.noiseBurst(d, { t, dur: 0.7, vol: 0.03, type: 'bandpass', freq: 2200, freqEnd: 900, Q: 2, attack: 0.2, release: 0.1 });
+    },
+    debrisClank(a, d, t) {    // a lump of the lift, off your head: CLANK
+      a.tone(d, { wave: 'sine', freq: 180, freqEnd: 70, t, dur: 0.2, vol: 0.2, release: 0.12 });
+      for (const f of [523, 787, 1109]) a.tone(d, { wave: 'triangle', freq: f * rand(0.97, 1.03), t, dur: 0.02, vol: 0.04, attack: 0.002, release: 0.45 });
+      a.noiseBurst(d, { t, dur: 0.08, vol: 0.1, type: 'bandpass', freq: 1800, Q: 1.5, release: 0.08 });
+    },
+    chickenCluck(a, d, t) {   // bwak bwak BWAAAK
+      for (let i = 0; i < 2; i++) a.tone(d, { wave: 'pulse25', freq: rand(620, 760), freqEnd: rand(480, 560), t: t + i * 0.1, dur: 0.05, vol: 0.03, release: 0.03 });
+      a.tone(d, { wave: 'pulse25', freq: 860, freqEnd: 520, t: t + 0.24, dur: 0.16, vol: 0.03, release: 0.05 });
+    },
+    villageGasp(a, d, t) {    // everyone in the square, all at once: *GASP*
+      a.noiseBurst(d, { t, dur: 0.35, vol: 0.1, type: 'bandpass', freq: 850, freqEnd: 1300, Q: 2.2, attack: 0.03, release: 0.25 });
+      a.noiseBurst(d, { t: t + 0.03, dur: 0.3, vol: 0.06, type: 'bandpass', freq: 1700, freqEnd: 2300, Q: 2.5, attack: 0.03, release: 0.2 });
+      a.noiseBurst(d, { t: t + 0.06, dur: 0.28, vol: 0.05, type: 'bandpass', freq: 600, freqEnd: 900, Q: 2, attack: 0.04, release: 0.22 });
     },
     minionPop(a, d, t) { a.tone(d, { wave: 'square', freq: 260, freqEnd: 520, t, dur: 0.06, vol: 0.05, release: 0.04 }); a.noiseBurst(d, { t, dur: 0.08, vol: 0.06, type: 'bandpass', freq: 1800, Q: 1.2, release: 0.06 }); },
     minionClaw(a, d, t) { a.noiseBurst(d, { t, dur: 0.07, vol: 0.07, type: 'bandpass', freq: 1500, freqEnd: 3800, Q: 1.3, release: 0.05 }); },

@@ -140,6 +140,7 @@
     }
     // sign posts
     for (const s of level.signs) {
+      if (s.custom) continue;   // (the level paints this one itself: a notice board, a road-closed sign...)
       const x = Math.round(s.x), y = Math.round(s.y);
       buf.rect(x - 1, y - 10, 2, 10, c32('#6a4630'));
       buf.rect(x - 7, y - 18, 14, 9, c32('#a8784a'));
