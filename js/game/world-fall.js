@@ -34,6 +34,8 @@
     // the lift out of the abyss (js/game/sky-launch.js) doesn't stop at the top: it BLASTS you out, way up past the
     // clouds... and then you fall, with bits of the lift coming down all round you, into Normalton
     village: { name: 'WORLD 1', sub: 'Back on the surface. Very, very far above it.', level: 'village', launch: true, high: ['debris', 'geese', 'bird', 'debris', 'plane', 'bird'], low: ['balloon', 'debris', 'kite', 'bird', 'debris', 'balloon'] },
+    // ...and once Normalton's Checkshot is on, you can jump down there from the void (the usual way in: the portal)
+    normalton: { name: 'WORLD 1', sub: 'Normalton, from way up here.', level: 'village', high: ['geese', 'bird', 'plane', 'bird'], low: ['balloon', 'kite', 'bird', 'plane', 'balloon'] },
   };
 
   // how long each part lasts (seconds)

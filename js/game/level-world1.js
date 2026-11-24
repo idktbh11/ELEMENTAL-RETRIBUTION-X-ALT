@@ -9,6 +9,8 @@
  * zone (you can't see far, you walk slowly, and wisps drift out of the mist),
  * and the road ends at a cliff with an old cave in it. It's boarded up, but
  * the boards break (see openCave), and in you go: js/game/level-oldcave.js.
+ * Once you've fallen through it, it caves in behind you (prepare): the cliff's a heap of
+ * rubble, and the path runs on over it, out of the fog... to Normalton (js/game/level-village.js).
  *
  *   World1Level        the ground you walk on (tiles, trees, flowers, the cliff...)
  *   level.drawSky()    everything behind it: sky, sun / moon / stars,
@@ -411,6 +413,21 @@
       g.thinkAloud('The sign DID say do not enter...');
     }
 
+    /**
+     * Before it's drawn (the game screen calls this): been down through the old cave? Then it caved in behind you.
+     * The cliff's a heap of rubble now, the path runs on over it... and on the other side of it is Normalton.
+     */
+    prepare(g) {
+      const pr = (g.character && g.character.progress) || {};
+      if (!(pr.caveFell || pr.trialDone || pr.bossDefeated || pr.normalton || ['deeperEnds', 'abyss', 'village'].indexOf(pr.stage) !== -1)) return;
+      this.rubble = true;
+      this.caveOpen = false;
+      for (let ty = 0; ty < this.surfRow; ty++) for (let tx = MAP.cave; tx < this.W; tx++) this.setTile(tx, ty, AIR);
+      const sign = this.signs.find((sg) => sg.text === 'DO NOT ENTER.');
+      if (sign) sign.text = 'DO NOT ENT\n(The rest of the sign is under a rock.)';
+      this.villageX = this.pw - 2 * TS;       // walk on past here, and you're in Normalton
+    }
+
     /** How foggy it is at x: 0 in the meadow, thickening through the fringe, 1 in the fog zone. */
     fogAt(x) {
       const k = U.clamp((x - this.fogStart) / (this.fogFull - this.fogStart), 0, 1);
@@ -433,13 +450,16 @@
         if (!grassAt.has(q)) grassAt.set(q, GRASS.map((g, i) => c32(mix(g, GRASS_FOG[i], (q / 16) * 0.85))));
         return grassAt.get(q);
       };
-      for (let x = 3 * TS; x < cave; x++) {
+      const groundEnd = this.rubble ? W : cave, rubble0 = cave - 5 * TS;
+      for (let x = 3 * TS; x < groundEnd; x++) {
         const g = greens(x);
         const lip = Math.round((n.n1(x * 0.21) - 0.5) * 2);           // the grass edge wobbles a little
         for (let y = top + lip; y < H; y++) {
           const d = y - top - lip;
           let col;
-          if (d === 0) col = g[0];
+          // (where the cliff came down: the path's a field of broken rock)
+          if (this.rubble && x >= rubble0 && d < 6 && n.n2(x * 0.16, y * 0.34) > 0.42 - Math.min(1, (x - rubble0) / (4 * TS)) * 0.3) { const v = n.n2(x * 0.45, y * 0.45); col = v > 0.66 ? st[0] : v > 0.4 ? st[1] : st[2]; }
+          else if (d === 0) col = g[0];
           else if (d < 3) col = g[1];
           else if (d < 5) col = ERX.bayer(x, y) < 0.6 ? g[2] : g[1];
           else if (d < 7) col = ERX.bayer(x, y) < 0.5 ? g[3] : s[0];
@@ -460,6 +480,8 @@
       }
 
       // ---- the cliff at the end of the road: lit at its face, darker further in, mossy on top ----
+      // (unless it's come down: then there's nothing but the rubble: renderBackWall)
+      if (this.rubble) return b.toCanvas();
       const rk = PAL.rock.map(c32), edge = c32(PAL.outline);
       for (let x = cave; x < W; x++) {
         const u = x - cave;
@@ -545,6 +567,22 @@
         if (more.next() < 0.45) rock(x, more.int(3, 6), false);
         else for (let i = 0; i < 5; i++) b.line(x, gy - 1, x + more.int(-6, 6), gy - more.int(4, 10), c32(i % 2 ? DEAD.bark : DEAD.dark));
       }
+      // the cliff that came down: a heap of broken rock (greyed in the fog), the planks that boarded up the cave in it
+      if (this.rubble) {
+        const x0 = cave - 3 * TS, x1 = this.pw, rocks = [];
+        for (let i = 0; i < 120; i++) {
+          const u = more.next(), x = x0 + u * (x1 - x0), peak = u < 0.35 ? 30 + (u / 0.35) * 70 : 100 - ((u - 0.35) / 0.65) * 55;
+          const r = more.int(5, 15);
+          rocks.push({ x, y: gy - more.range(0, Math.max(0, peak - r)), r, mossy: more.next() < 0.3 });
+        }
+        rocks.sort((a, b2) => a.y - b2.y);
+        for (const k of rocks) {
+          b.ellipse(Math.round(k.x), Math.round(k.y), k.r, Math.round(k.r * 0.75), c32('#625c64'));
+          b.ellipse(Math.round(k.x - 1), Math.round(k.y - 1), k.r - 1, Math.round(k.r * 0.75) - 1, c32('#7e787e'));
+          b.ellipse(Math.round(k.x - k.r * 0.3), Math.round(k.y - k.r * 0.35), Math.round(k.r * 0.4), Math.round(k.r * 0.25), c32(k.mossy ? '#6a8a6a' : '#9a9496'));
+        }
+        for (let i = 0; i < 7; i++) { const px = x0 + more.range(10, x1 - x0 - 10), py = gy - more.range(4, 40), a = more.range(-0.9, 0.9), L2 = more.int(14, 26); b.line(Math.round(px), Math.round(py), Math.round(px + Math.cos(a) * L2), Math.round(py + Math.sin(a) * L2), c32('#7a5236')); b.line(Math.round(px), Math.round(py + 1), Math.round(px + Math.cos(a) * L2), Math.round(py + 1 + Math.sin(a) * L2), c32('#a8784a')); }
+      }
       // the giant old tree on the far left: you are not getting past this
       const tx = 2 * TS;
       for (let y = 0; y < gy; y++) { const w = 26 + Math.round(Math.max(0, (y - gy + 40) * 0.5)); for (let xx = -w; xx <= Math.round(w * 0.4); xx++) { const edge = xx < -w + 3 ? 2 : xx > w * 0.4 - 3 ? 0 : 1; b.set(tx + xx, y, c32(['#a07048', '#7a5236', '#5a3a28'][edge === 1 ? (ERX.bayer(tx + xx, y) < 0.15 ? 2 : 1) : edge])); } }
@@ -561,6 +599,7 @@
         for (let i = 0; i < h + 3; i++) { const bx = x + rng.int(-3, 3), bh = rng.int(2, h); for (let yy = 0; yy < bh; yy++) b.set(bx + Math.round((yy / bh) * rng.range(-1, 1)), gy - yy, c32(yy > bh - 2 ? pal[0] : pal[2])); }
       }
       for (let i = 0; i < 14; i++) { const cx = 2 * TS + rng.int(-10, 40), cy = rng.int(4, 120); b.circle(cx, cy, rng.int(6, 12), c32('#2c7a36')); b.circle(cx + 2, cy - 2, rng.int(3, 6), c32('#46a043')); }
+      if (this.rubble) for (let x = this.caveX - 2 * TS; x < this.pw - 8; x += rng.int(22, 44)) { const r = rng.int(2, 4); b.ellipse(x, gy - r + 1, r + 1, r, c32('#625c64')); b.ellipse(x - 1, gy - r, r, r - 1, c32('#8e8894')); }
       return b.toCanvas();
     }
 
@@ -600,12 +639,13 @@
       const p = g.player;
       if (!p) return;
       if (!this.saidFog && this.fogAt(p.cx) > 0.4) { this.saidFog = true; g.thinkAloud('Getting hard to see out here...'); }
-      // wisps drift out of the fog ahead of you as you go deeper
+      // wisps drift out of the fog ahead of you as you go deeper (walking it from the east, over the rubble: ahead is west)
+      const dir = this.fromEast ? -1 : 1;
       for (const m of this.wispMarks) {
-        if (m.done || p.cx < m.x) continue;
+        if (m.done || (dir > 0 ? p.cx < m.x : p.cx > m.x)) continue;
         m.done = true;
         for (let i = 0; i < m.n; i++) {
-          const x = U.clamp(p.cx + U.lerp(90, 150, Math.random()) + i * 30, this.wispMinX + 8, this.wispMaxX - 8);
+          const x = U.clamp(p.cx + dir * (U.lerp(90, 150, Math.random()) + i * 30), this.wispMinX + 8, this.wispMaxX - 8);
           const e = ERX.Enemies.create(g, { type: 'wisp', x, y: this.floorY - U.lerp(36, 80, Math.random()) });
           if (e) g.enemies.push(e);
         }

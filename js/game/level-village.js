@@ -5,6 +5,8 @@
  * cottages with flower boxes, the bakery, the general store, a cobbled square with a well and a
  * great old oak (and a crater in the middle, now: you), the SLEEPY GOOSE inn, the smithy... and at
  * the east gate, the road out of town, dug up and fenced off. Under construction. Guarded.
+ * The west end's the other side of World 1's old cave: the cliff came down in a heap when the
+ * cave did, and the path runs on over the rubble, back through the fog to the meadow.
  *
  *   VillageLevel extends World1Level: the same sky, sun, clouds and day/night (it's the same
  *   planet), so the sky fall (js/game/world-fall.js) works on it as it is. Its own ground,
@@ -12,6 +14,7 @@
  *
  *   level.folk           where the villagers stand and what they do (their looks + lines: story-world.js)
  *   level.crater         where you came down (drawn in the square from then on)
+ *   level.checkshotX     the village's Checkshot, in the square (drawn and used like World 1's: game-screen.js)
  *   VillageLevel.folkUpdate / folkDraw   the game screen calls these for each villager
  */
 (function (ERX) {
@@ -48,11 +51,12 @@
   // ---------------------------------------------------------------- the layout (tiles)
   const MAP = {
     W: 132, surf: 27,
-    west: 4, east: 128,         // the cliffs at either end: solid up to / from these
+    west: 4, east: 128,         // the west end: the rubble of the old cave's cliff (World 1's over it); the east end: a cliff, solid from here
     farm: 21,                   // grass up to here (the farm), then the street
     square: [52, 78],           // the cobbled square
     gate: 113,                  // the east gate; past it the road is dug up (under construction)
     land: 65,                   // where you come down: the middle of the square
+    checkshot: 67.6,            // the village's Checkshot, in the square (the game screen draws it)
     spawn: 60,                  // back from a save: here
     slime: 110.9,               // where the grumpy slime stands guard
   };
@@ -73,7 +77,7 @@
     { id: 'clover', x: 18, mode: 'wander', range: [9, 22], speed: 16, facing: -1 },
     { id: 'rosa', x: 40.5, mode: 'idle', facing: 1 },
     { id: 'fenwick', x: 49.5, mode: 'idle', facing: -1 },
-    { id: 'bramble', x: 60, mode: 'wander', range: [55, 71], speed: 12, facing: 1 },
+    { id: 'bramble', x: 60, mode: 'wander', range: [55, 65.5], speed: 12, facing: 1 },
     { id: 'pip', x: 74.6, mode: 'sit', facing: -1 },
     { id: 'molly', x: 86, mode: 'idle', facing: -1 },
     { id: 'holt', x: 93.2, mode: 'smith', facing: 1 },
@@ -427,7 +431,8 @@
       this.tiles.fill(AIR);
       this.surfRow = MAP.surf;
       for (let x = 0; x < this.W; x++) for (let y = this.surfRow; y < this.H; y++) this.setTile(x, y, ROCK);
-      this.solid(0, MAP.west, 0, this.H); this.solid(MAP.east, this.W, 0, this.H);
+      this.solid(MAP.east, this.W, 0, this.H);
+      this.westX = Math.round(1.5 * TS);  // walk on past here (over the rubble), and you're back in World 1, by the old cave
       this.floorY = this.surfRow * TS;
       this.landX = MAP.land * TS + 8;
       this.spawn = { x: MAP.spawn * TS, y: this.floorY };
@@ -435,6 +440,7 @@
       this.fallHeight = 3600;            // (World 1's own: the backdrop's clouds are laid out for it)
       this.cloudAlt = 1750;
       this.slimeX = MAP.slime * TS;
+      this.checkshotX = Math.round(MAP.checkshot * TS);   // (a Checkshot: switch it on, and you can recall to the void from here, and come back)
       this.gateX = MAP.gate * TS;
       this.squareX = MAP.square.map((t) => t * TS);
       this.caveX = this.pw;              // (World 1's bits that look for these: nothing out here)
@@ -447,6 +453,7 @@
       this.chalk = [];
       this.signs = [
         { x: 26 * TS, y: this.floorY, text: 'NORMALTON\nPopulation: 31.\nA perfectly normal village.\n(Please do not fall on it.)', read: false },
+        { x: 5.4 * TS, y: this.floorY, text: '<-  THE MEADOW\nOver the rocks, through the fog.\n(There used to be a cave there.)', read: false },
         { x: 53.5 * TS, y: this.floorY, custom: true, text: 'NORMALTON NOTICE BOARD\n- LOST: one goose. Answers to "Gerald".\n- Bake sale Sunday. Bring buns.\n- New road east: OPENING SOON.\n- Please stop falling out of the sky.\n   - the Mayor', read: false },
         { x: 109.6 * TS, y: this.floorY, custom: true, text: 'ROAD CLOSED\nUnder construction.\nNo entry. No exceptions.\nNo, not even you.\n   - Management', read: false },
       ];
@@ -469,6 +476,7 @@
     /** What the ground is like at x: the farm's grass, the street, the cobbled square, the dug-up road past the gate. */
     zoneAt(x) {
       const t = x / TS;
+      if (t < MAP.west) return 'rubble';
       if (t < MAP.farm || t >= MAP.east - 1) return 'grass';
       if (t >= MAP.square[0] && t < MAP.square[1]) return 'cobble';
       if (t >= MAP.gate + 2.5) return 'dug';
@@ -478,7 +486,7 @@
     /** The ground: grass and soil, the street's packed dirt, the square's cobbles, the dug-up road; cliffs at either end. */
     renderTiles() {
       const W = this.pw, H = this.ph, b = new PB(W, H), n = new U.Noise(0x7a11);
-      const top = this.floorY, X0 = MAP.west * TS, X1 = MAP.east * TS;
+      const top = this.floorY, X0 = 0, X1 = MAP.east * TS;
       const soilAt = (x, y, d) => {
         const k = U.clamp((d - 7) / 40, 0, 0.999), band = Math.floor(k * (SOIL.length - 1) + bayer(x, y) * 0.9);
         let col = SOIL[Math.min(SOIL.length - 1, band)];
@@ -492,7 +500,8 @@
         for (let y = top + lip; y < H; y++) {
           const d = y - top - lip;
           let col;
-          if (zone === 'grass') col = d === 0 ? GRASS[0] : d < 3 ? GRASS[1] : d < 5 ? (bayer(x, y) < 0.6 ? GRASS[2] : GRASS[1]) : d < 7 ? (bayer(x, y) < 0.5 ? GRASS[3] : SOIL[0]) : soilAt(x, y, d);
+          if (zone === 'rubble' && d < 6 && n.n2(x * 0.16, y * 0.34) > 0.12 + (x / (MAP.west * TS)) * 0.3) { const v = n.n2(x * 0.45, y * 0.45); col = v > 0.66 ? CLIFF[0] : v > 0.4 ? CLIFF[1] : CLIFF[2]; }
+          else if (zone === 'grass' || zone === 'rubble') col = d === 0 ? GRASS[0] : d < 3 ? GRASS[1] : d < 5 ? (bayer(x, y) < 0.6 ? GRASS[2] : GRASS[1]) : d < 7 ? (bayer(x, y) < 0.5 ? GRASS[3] : SOIL[0]) : soilAt(x, y, d);
           else if (zone === 'road') {
             col = d === 0 ? ROAD[0] : d < 3 ? ROAD[1] : d < 5 ? (bayer(x, y) < 0.55 ? ROAD[2] : ROAD[1]) : d < 7 ? (bayer(x, y) < 0.5 ? ROAD[3] : SOIL[0]) : soilAt(x, y, d);
             if (d > 0 && d < 5 && n.n2(x * 0.9, y * 0.9) > 0.78) col = n.n2(x * 1.3, y) > 0.5 ? '#e8d8b8' : '#8a7458';   // pebbles
@@ -508,11 +517,11 @@
         }
         // grass tufts poking up (in the grass, and at the edges of the street)
         const r = n.n1(x * 1.7 + 5);
-        if (zone === 'grass') { if (r > 0.42) S(b, x, top + lip - 1, r > 0.7 ? GRASS[0] : GRASS[1]); if (r > 0.66) S(b, x, top + lip - 2, GRASS[0]); }
+        if (zone === 'grass' || zone === 'rubble') { if (r > 0.42) S(b, x, top + lip - 1, r > 0.7 ? GRASS[0] : GRASS[1]); if (r > 0.66) S(b, x, top + lip - 2, GRASS[0]); }
         else if (zone === 'dug' && r > 0.6) S(b, x, top - 1, SOIL[1]);
       }
       // the cliffs at either end: grey rock, mossy on top
-      for (const [from, to, face] of [[0, X0, X0], [X1, W, X1]]) {
+      for (const [from, to, face] of [[X1, W, X1]]) {
         for (let x = from; x < to; x++) {
           const u = Math.abs(x - face), ctop = Math.round(top - (124 + 46 * (1 - Math.exp(-u / 30))) + (n.n1(x * 0.07 + 3) - 0.5) * 14);
           for (let y = Math.max(0, ctop); y < H; y++) {
@@ -524,7 +533,7 @@
           }
           if (ctop - 1 >= 0) b.data[(ctop - 1) * W + x] = K(INK);
         }
-        for (let y = 0; y < top; y++) if (b.solid(face + (face === X0 ? -1 : 0), y)) S(b, face === X0 ? face : face - 1, y, INK);
+        for (let y = 0; y < top; y++) if (b.solid(face, y)) S(b, face - 1, y, INK);
       }
       // the crater-to-be? No: that's drawn live (it's not there until you make it)
       return b.toCanvas();
@@ -541,6 +550,14 @@
         blit(b, tr, x, gy - 2);
       }
       for (let x = T(MAP.west + 1); x < T(MAP.east - 1); x += 3) { const h = 6 + Math.round(Math.abs(Math.sin(x * 0.05)) * 4 + Math.sin(x * 0.31) * 1.5); R(b, x, gy - h, 3, h + 2, x % 6 ? '#3a7a46' : '#2e6a3c'); S(b, x + 1, gy - h, '#5a9a56'); }
+      // ---- the west end: the other side of the old cave's cliff, come down in a heap (World 1's over it)
+      const heap = [];
+      for (let i = 0; i < 60; i++) {
+        const u = rng.next(), x = u * T(MAP.west + 1.5), peak = 110 - u * 96, r = rng.int(5, 15);
+        heap.push({ x, y: gy - rng.range(0, Math.max(0, peak - r)), r, mossy: rng.next() < 0.4 });
+      }
+      heap.sort((a, c) => a.y - c.y);
+      for (const k of heap) { oval(b, k.x, k.y, k.r, Math.round(k.r * 0.75), CLIFF[3]); oval(b, k.x - 1, k.y - 1, k.r - 1, Math.round(k.r * 0.75) - 1, CLIFF[1]); oval(b, k.x - k.r * 0.3, k.y - k.r * 0.35, Math.round(k.r * 0.4), Math.round(k.r * 0.25), k.mossy ? '#7ab85a' : CLIFF[0]); }
       // ---- the farm: a field of cabbages and wheat behind a fence, the scarecrow, the barn
       for (const B of BUILD) {
         const X = T(B.x), Wd = T(B.w);
@@ -561,7 +578,7 @@
       paintNotice(b, T(53.5), gy);
       paintLamp(b, T(55.5), gy, out); paintLamp(b, T(70.5), gy, out); paintLamp(b, T(77.2), gy, out); paintLamp(b, T(33.5), gy, out); paintLamp(b, T(97.7), gy, out);
       paintWell(b, T(58.3), gy);
-      for (const fx of [T(62), T(67.6)]) { R(b, fx - 12, gy - 4, 25, 4, STONE[1]); R(b, fx - 12, gy - 4, 25, 1, STONE[0]); for (let i = 0; i < 18; i++) { const px = fx - 10 + rng.int(0, 20), py = gy - 5 - rng.int(0, 3); S(b, px, py + 1, '#3e9a3c'); S(b, px, py, rng.pick(FLOWERS)); } }
+      for (const fx of [T(62)]) { R(b, fx - 12, gy - 4, 25, 4, STONE[1]); R(b, fx - 12, gy - 4, 25, 1, STONE[0]); for (let i = 0; i < 18; i++) { const px = fx - 10 + rng.int(0, 20), py = gy - 5 - rng.int(0, 3); S(b, px, py + 1, '#3e9a3c'); S(b, px, py, rng.pick(FLOWERS)); } }
       blit(b, P.roundTree(rng, 27, TREE), T(73.2), gy + 1);
       paintBench(b, T(74.6), gy);
       // ---- by the inn: barrels; past the smithy: more crates
@@ -584,6 +601,7 @@
     /** In front of you: grass tufts along the bottom (where there's grass) and flowers. */
     renderFront() {
       const W = this.pw, H = this.ph, b = new PB(W, H), rng = new U.RNG(0xf10e), gy = this.floorY + 2;
+      for (let x = Math.round(0.6 * TS); x < MAP.west * TS; x += rng.int(18, 30)) { const r = rng.int(2, 4); b.ellipse(x, gy - r + 1, r + 1, r, K(CLIFF[3])); b.ellipse(x - 1, gy - r, r, r - 1, K(CLIFF[1])); }
       for (let x = MAP.west * TS + 4; x < MAP.east * TS - 4; x += rng.int(8, 22)) {
         const z = this.zoneAt(x);
         if (z !== 'grass' && rng.next() < 0.8) continue;

@@ -161,6 +161,14 @@
     if (!(c.progress && c.progress.vrd)) return yield* vrd(g);
     const p = g.player;
     g.lockControls(true);
+    // switched Normalton's Checkshot on? Then you get to pick where you come down
+    let at = null;
+    if (c.progress && c.progress.checkshotVillage) {
+      const i = yield* choose(g, ['World 1: the meadow', 'World 1: Normalton', 'Not yet']);
+      g.dialogue.close();
+      if (i === 2) { g.lockControls(false); return; }
+      if (i === 1) at = 'village';
+    }
     g.objective = null;
     p.vx = 0;
     p.facing = 1;
@@ -168,7 +176,7 @@
     yield 0.4;
     g.startLaunch();                      // up, up... into the light
     yield 2.05;
-    g.enterWorld(1);                      // 2 s of black, then the portal (world-fall.js)
+    g.enterWorld(1, at);                  // 2 s of black, then the portal (world-fall.js)
   }
 
   // ================================================== WORLD 1: you're down
@@ -190,7 +198,7 @@
       g.activateCheckshot();
       yield 1.3;
       if (g.objective) g.completeObjective();
-      if (ERX.Items.has(g.character, 'vrd')) g.thinkAloud('The VRD is buzzing.', '#c89aff');
+      if (g.levelId === 'world1' && ERX.Items.has(g.character, 'vrd')) g.thinkAloud('The VRD is buzzing.', '#c89aff');
       yield 0.6;
       g.lockControls(false);
       return;
@@ -232,6 +240,7 @@
     yield 0.4;
     // ...and gives way
     L.breakFloor(g, p.cx);
+    g.saveFlag('caveFell');            // (and the whole cave comes down behind you: World 1's cliff is rubble from now on)
     g.startCaveFall();
   }
 
@@ -451,6 +460,7 @@
         ['Welcome to Normalton! Population: thirty-one.', 'Thirty-two, counting the goose. Thirty-one, since the goose went missing.'],
         ['That crater in the square? Leave it. It is a landmark now.', 'We shall put a little fence round it. Possibly a plaque.'],
         ['The new road east is nearly finished! Any day now.', 'The construction slime has been saying "any day now" for... some time.'],
+        ['That stone in the square, with the crystal floating over it? The slime calls it a "Checkshot".', 'Nobody knows who put it there. We polish it on Sundays.'],
       ],
     },
     rosa: {
@@ -510,6 +520,7 @@
       lines: [
         ['Mind the chickens. They have opinions.', 'Mostly about you. Mostly bad.'],
         ['Best cabbages in all of World 1, these.', 'Only cabbages in all of World 1? Never checked.'],
+        ['Heard an almighty rumble out west a while back. That whole cliff came down.', 'Opened up a nice shortcut to the meadow, mind. Through the fog. Bring a lantern.'],
       ],
     },
   };
@@ -522,7 +533,9 @@
     const L = g.level, p = g.player;
     g.lockControls(true);
     p.vx = 0;
+    g.checkpoint = { x: p.cx, y: p.feet };
     g.saveProgress('village');
+    g.saveFlag('normalton');
     // everyone nearby jumps... and stares
     for (const n of g.npcs) if (n.id !== 'slime' && Math.abs(n.x - p.cx) < 280) { n.bubble = 'bang'; n.bubbleT = 1.6; n.watch = p.cx; n.stay = true; }
     sfx('villageGasp');
@@ -566,6 +579,23 @@
     g.music('normalton');
     ERX.Audio.setAmbience('village');
     g.banner = { title: 'NORMALTON', sub: 'Population: 31. Suspiciously normal.', t: 0, dur: 4.5 };
+    if (g.checkshot && !g.checkshot.on) g.setObjective('ACTIVATE THE CHECKSHOT', null, 1);
+    g.lockControls(false);
+  }
+  /** Back down in Normalton (from the void, through its Checkshot... or out of the lift, again): it's getting to be a habit. */
+  function* villageReturn(g) {
+    const p = g.player;
+    g.lockControls(true);
+    p.vx = 0;
+    g.checkpoint = { x: p.cx, y: p.feet };
+    g.saveProgress('village');
+    for (const n of g.npcs) if (n.id !== 'slime' && Math.abs(n.x - p.cx) < 240) { n.bubble = 'what'; n.bubbleT = 1.3; n.watch = p.cx; }
+    yield 1.1;
+    for (const n of g.npcs) n.watch = null;
+    g.music('normalton');
+    ERX.Audio.setAmbience('village');
+    g.banner = { title: 'NORMALTON', sub: 'Another crater. Lovely.', t: 0, dur: 3.5 };
+    if (g.checkshot && !g.checkshot.on) g.setObjective('ACTIVATE THE CHECKSHOT', null, 1);
     g.lockControls(false);
   }
 
@@ -593,5 +623,5 @@
     g.lockControls(false);
   }
 
-  ERX.Story.world = { vrd, jump, world1Arrival, checkshot, theBars, deeperArrival, trialStart, trialDone, skullCollapse, abyssArrival, abyssBoss, abyssAfter, liftGo, villageArrival, slimeTalk, VILLAGERS, EYES };
+  ERX.Story.world = { vrd, jump, world1Arrival, checkshot, theBars, deeperArrival, trialStart, trialDone, skullCollapse, abyssArrival, abyssBoss, abyssAfter, liftGo, villageArrival, villageReturn, slimeTalk, VILLAGERS, EYES };
 })(window.ERX = window.ERX || {});

@@ -88,6 +88,7 @@
       this.levelId = id;
       const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel, world1: ERX.World1Level, oldcave: ERX.OldCaveLevel, deeper: ERX.DeeperEndsLevel, abyss: ERX.AbyssLevel, village: ERX.VillageLevel }[id] || ERX.DeepEndsLevel;
       this.level = new Level(seed);
+      if (this.level.prepare) this.level.prepare(this, opts);   // (from what you've done: World 1's old cave, caved in)
       this.backWall = this.level.renderBackWall ? this.level.renderBackWall() : null;
       this.frontLayer = this.level.renderFront ? this.level.renderFront() : null;
       this.tilesCanvas = this.level.renderTiles();
@@ -203,7 +204,7 @@
         this.hudAlpha = 1;
         this.allowDeath = true;
         ERX.Audio.setAmbience(null);
-        if (opts.intro || this.stage() !== 'worldUnlocked') {
+        if (opts.intro || stageIndex(this.stage()) < stageIndex('worldUnlocked')) {
           // floating in space, fast asleep. The Voice is out there somewhere.
           this.float = { t: 0, x: L.spawn.x, y: L.floorY - 64 };
           p.placeAt(this.float.x, this.float.y);
@@ -246,7 +247,8 @@
         ERX.Audio.setAmbience(null);
         this.banner = { title: 'TRAINING ROOM', sub: 'Hit stuff. Learn stuff. The dummies signed waivers.', t: 0, dur: 3.5 };
       } else if (id === 'world1') {
-        // WORLD 1: you always arrive from the sky; coming back from a save puts you at the Checkshot
+        // WORLD 1: you always arrive from the sky; coming back from a save puts you at the Checkshot; walking back
+        // from Normalton (over the rubble of the old cave) puts you at the far east end
         const L = this.level;
         L.game = this;
         L.ambience = 'world1';
@@ -260,6 +262,14 @@
           p.placeAt(L.landX, L.floorY - L.fallHeight);
           this.fall = new ERX.SkyFall(this, 1);
           this.fall.onDone = (g) => g.runScript(ERX.Story.world.world1Arrival);
+        } else if (opts.at === 'rubble' && L.rubble) {
+          p.placeAt(L.villageX - 3 * L.TS, L.floorY);
+          p.facing = -1;
+          L.fromEast = true;          // (the fog's wisps come out ahead of you, westward)
+          L.saidFog = true;           // (and you're already in it: nothing to remark on)
+          this.checkshot.on = !!(this.character.progress && this.character.progress.checkshot1);
+          ERX.Audio.playMusic('world1');
+          ERX.Audio.setAmbience('world1');
         } else {
           p.placeAt(L.checkshotX + 20, L.floorY);
           this.checkshot.on = true;
@@ -267,8 +277,10 @@
           ERX.Audio.setAmbience('world1');
         }
         for (const s of L.enemySpawns) this.enemies.push(ERX.Enemies.create(this, s));
-        // the old cave at the end of the road: boarded up until you smash the boards (then it stays open)
-        if (this.character.progress && this.character.progress.caveOpen) L.openCave(this, true);
+        // the old cave at the end of the road: boarded up until you smash the boards (then it stays open)...
+        // and once you've been down through it, a heap of rubble you walk over (to Normalton)
+        if (L.rubble) { /* (nothing to smash: it's all come down) */ }
+        else if (this.character.progress && this.character.progress.caveOpen) L.openCave(this, true);
         else this.enemies.push(ERX.Enemies.create(this, { type: 'barricade', x: L.caveX }));
       } else if (id === 'oldcave') {
         // THE OLD CAVE (js/game/level-oldcave.js): in from world 1, torches and bats, the bars at the end
@@ -315,15 +327,15 @@
         for (const n of L.npcs) this.npcs.push(Object.assign({ talkIndex: 0, t: 0 }, n));
         ERX.Audio.setAmbience('cave');
         ERX.Audio.playMusic(null);
+        // the Azure Zombie's beaten: the lights are on, and the far passage is open (the lift's through there)
+        const won = this.character.progress && this.character.progress.bossDefeated;
+        if (won) L.afterBoss();
         if (opts.fallIn) {
           p.placeAt(L.landX, L.floorY - 300);
           p.controls = false;
           this.runScript(ERX.Story.world.abyssArrival);
         } else {
           p.placeAt(L.spawn.x, L.spawn.y);
-          const won = this.character.progress && this.character.progress.bossDefeated;
-          // the Azure Zombie's beaten: the lights are on, and the far passage is open (the lift's through there)
-          if (won) L.afterBoss();
           this.banner = { title: 'THE ABYSS', sub: won ? 'Quiet, now.' : 'All the way down. Probably.', t: 0, dur: 4 };
         }
         this.darkness = L.darknessAt();
@@ -339,15 +351,31 @@
         this.allowDeath = true;
         if (this.worldTod === undefined) this.worldTod = 0.12;   // a fresh morning
         for (const n of L.npcs) this.npcs.push(Object.assign({ talkIndex: 0, t: Math.random() * 3 }, n));
-        if (opts.launch) {
-          p.placeAt(L.landX, L.floorY - 600);
-          this.fall = new ERX.SkyFall(this, 'village');
-          this.fall.onDone = (g) => g.runScript(ERX.Story.world.villageArrival);
-        } else {
-          p.placeAt(L.spawn.x, L.spawn.y);
+        const prog = this.character.progress || {};
+        // the Checkshot in the square: once it's on, you can recall to the void from here (and jump back down here)
+        this.checkshot = { x: L.checkshotX, y: L.floorY, on: !!prog.checkshotVillage, t: 0, onT: 0, flag: 'checkshotVillage' };
+        // the first time (out of the lift), the slime comes down after you; any other time it's already at the gate
+        const first = opts.launch && !prog.normalton;
+        const s = this.npcs.find((n) => n.id === 'slime');
+        if (s && !first) { s.hidden = false; s.x = L.slimeX; s.y = L.floorY; s.guard = true; }
+        if (opts.launch || opts.fall) {
+          // out of the lift (blasted up, then down), or down from the void (through the portal)
+          p.placeAt(L.landX, L.floorY - (opts.launch ? 600 : L.fallHeight));
+          this.fall = new ERX.SkyFall(this, opts.launch ? 'village' : 'normalton');
+          this.fall.onDone = (g) => g.runScript(first ? ERX.Story.world.villageArrival : ERX.Story.world.villageReturn);
+        } else if (opts.at === 'west') {
+          // walked in from World 1, over the rubble of the old cave
+          p.placeAt(L.westX + 30, L.floorY);
+          p.facing = 1;
           L.crater = { x: L.landX };
-          const s = this.npcs.find((n) => n.id === 'slime');
-          if (s) { s.hidden = false; s.x = L.slimeX; s.y = L.floorY; s.guard = true; }
+          if (!prog.normalton) this.saveFlag('normalton');
+          this.saveProgress('village');
+          ERX.Audio.playMusic('normalton');
+          ERX.Audio.setAmbience('village');
+          this.banner = { title: 'NORMALTON', sub: 'Population: 31. Suspiciously normal.', t: 0, dur: 4 };
+        } else {
+          p.placeAt(this.checkshot.on ? L.checkshotX + 20 : L.spawn.x, L.floorY);
+          L.crater = { x: L.landX };
           ERX.Audio.playMusic('normalton');
           ERX.Audio.setAmbience('village');
           this.banner = { title: 'NORMALTON', sub: 'Population: 31. Suspiciously normal.', t: 0, dur: 4 };
@@ -653,9 +681,10 @@
 
     // ------------------------------------------------------- the worlds
     /** Drop into a world: 2 s of black, the portal, the fall (js/game/world-fall.js). */
-    enterWorld(n) {
+    enterWorld(n, at) {
       this.flashT = 0;
-      this.loadLevel('world' + n, { fall: true });
+      if (at === 'village') this.loadLevel('village', { fall: true });   // (World 1, but down over Normalton: its Checkshot's on)
+      else this.loadLevel('world' + n, { fall: true });
     }
     /** Remember a story moment on the character (progress.vrd, progress.world1...). */
     saveFlag(name) {
@@ -781,7 +810,7 @@
       this.checkpoint = { x: cs.x, y: cs.y };
       this.floats.push({ x: cs.x, y: cs.y - 44, text: 'CHECKSHOT REACHED', color: '#e0c8ff', t: 0, dur: 2.4, rise: 8 });
       for (let i = 0; i < 30; i++) { const a = Math.random() * Math.PI * 2, sp = U.lerp(30, 110, Math.random()); this.fx.add({ x: cs.x, y: cs.y - 28, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: U.lerp(0.5, 1, Math.random()), color: Math.random() < 0.6 ? '#c89aff' : '#ffffff', size: 1, fadeOut: 0.4 }); }
-      this.saveFlag('checkshot1');
+      this.saveFlag(cs.flag || 'checkshot1');
     }
     /** The VRD: you dissolve into the void's colours, and you're home. */
     startRecall() {
@@ -1284,12 +1313,15 @@
       if (this.levelId === 'world1') {
         const L = this.level;
         if (L.caveOpen && p.cx > L.caveX + 20) { p.controls = false; this.travel('oldcave', {}); return; }   // into the old cave
-        const cs = this.checkshot;
-        if (cs && Math.abs(p.cx - cs.x) < 16 && p.onGround) {
-          this.prompt = { x: cs.x, y: cs.y - 46, text: cs.on ? '{use} RECALL TO THE VOID (VRD)' : '{use} ACTIVATE THE CHECKSHOT' };
-          if (K.wasPressed('use')) this.runScript(ERX.Story.world.checkshot);
-          return;
-        }
+        if (L.rubble && p.cx > L.villageX) { p.controls = false; this.travel('village', { at: 'west' }); return; }   // over the rubble, on to Normalton
+      }
+      if (this.levelId === 'village' && p.cx < this.level.westX) { p.controls = false; this.travel('world1', { at: 'rubble' }); return; }   // back over the rubble, into World 1
+      // a Checkshot (World 1's meadow, Normalton's square): switch it on; once it's on, recall to the void
+      const cs = this.checkshot;
+      if (cs && Math.abs(p.cx - cs.x) < 16 && p.onGround) {
+        this.prompt = { x: cs.x, y: cs.y - 46, text: cs.on ? '{use} RECALL TO THE VOID (VRD)' : '{use} ACTIVATE THE CHECKSHOT' };
+        if (K.wasPressed('use')) this.runScript(ERX.Story.world.checkshot);
+        return;
       }
       if (this.levelId === 'oldcave') {
         const L = this.level;
