@@ -125,7 +125,15 @@
     T.rect(ctx, x + 30, y + 34, Math.round(70 * U.clamp(p.xp / need, 0, 1)), 2, '#a8f0ff');
     // gold
     T.rect(ctx, x + 1, y + 34, 5, 5, T.ink); T.rect(ctx, x + 2, y + 35, 3, 3, '#ffd34d'); T.rect(ctx, x + 2, y + 35, 1, 1, '#fff6c0');
-    F.draw(ctx, (g.character.gold || 0) + 'G', x + 8, y + 33, { color: '#ffd34d', outline: T.ink });
+    const goldW = F.draw(ctx, (g.character.gold || 0) + 'G', x + 8, y + 33, { color: '#ffd34d', outline: T.ink });
+    // food in the bag (it feeds you when you're low)
+    const food = ERX.Inventory ? ERX.Inventory.foodCount(g.character) : 0;
+    if (food) {
+      const fx = x + 8 + goldW + 7, fy = y + 35;
+      T.rect(ctx, fx - 1, fy - 1, 5, 5, T.ink); T.rect(ctx, fx, fy, 3, 3, '#c8703a'); T.rect(ctx, fx, fy, 1, 1, '#e8a060');
+      T.rect(ctx, fx + 3, fy + 3, 2, 1, '#f0ece0'); T.rect(ctx, fx + 4, fy + 4, 1, 1, '#f0ece0');
+      F.draw(ctx, 'x' + food, fx + 7, y + 33, { color: '#f0c8a0', outline: T.ink });
+    }
     bar(ctx, x + 30, y + 11, 70, 5, g.hpShown / p.maxHp, '#e0403a', '#8a1e1e');
     F.draw(ctx, Math.ceil(p.hp) + '/' + p.maxHp, x + 104, y + 10, { color: '#ffb0a0', outline: T.ink });
     bar(ctx, x + 30, y + 19, 50, 4, p.mp / p.maxMp, '#3a8aff', '#1a3a8a');

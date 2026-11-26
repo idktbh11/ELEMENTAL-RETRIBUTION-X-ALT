@@ -123,7 +123,8 @@
     clamp(level) {
       // (a level can hide its far end until it's open: camRight, the furthest the view goes)
       const right = level.camRight !== undefined ? Math.min(level.pw, level.camRight) : level.pw;
-      this.x = U.clamp(this.x, 0, Math.max(0, right - this.vw));
+      // (narrower than the view, a room inside a house: it sits in the middle)
+      this.x = level.pw <= this.vw ? (level.pw - this.vw) / 2 : U.clamp(this.x, 0, Math.max(0, right - this.vw));
       // taller than the level (very tall windows): centre it vertically
       this.y = level.ph <= this.vh ? (level.ph - this.vh) / 2 : U.clamp(this.y, 0, level.ph - this.vh);
     }

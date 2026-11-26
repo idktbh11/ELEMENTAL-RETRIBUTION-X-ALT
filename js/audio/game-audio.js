@@ -20,6 +20,11 @@
   V.drone = (a, d, f, t, dur, tr) => {
     a.tone(d, { wave: 'sawtooth', freq: f, t, dur: dur * 0.98, vol: tr.pad.vol, attack: 0.2, release: 0.3, vibrato: 2, vibratoRate: 0.5 });
   };
+  // a lute by the fire (the Sleepy Goose): plucked, warm, gone quickly
+  V.lute = (a, d, f, t, dur, tr) => {
+    a.tone(d, { wave: 'triangle', freq: f, t, dur: Math.min(dur * 0.95, 0.9), vol: tr.lead.vol, attack: 0.003, decay: 0.22, sustain: 0.3, release: 0.25 });
+    a.tone(d, { wave: 'square', freq: f * 2, t, dur: 0.06, vol: tr.lead.vol * 0.12, attack: 0.002, release: 0.05 });
+  };
 
   // ------------------------------------------------------------- tracks
   Object.assign(ERX.MusicTracks, {
@@ -219,6 +224,25 @@
   Object.assign(ERX.MusicTracks, {
     // THE TRIAL: war drums, brass, strings sawing away underneath, a choir. Prove yourself.
     // NORMALTON: a perfectly normal village tune. A happy flute, a bouncing bass, a plucky arp, a gentle shuffle. D major.
+    // The Sleepy Goose: a slow, cosy waltz for the inn (a lute by the fire).
+    sleepygoose: {
+      title: 'The Sleepy Goose',
+      bpm: 84, stepsPerBar: 12, swing: 0.1, restEvery: 4,
+      chords: 'F F Bb F Dm Gm C C F F Bb Bb Gm C F F',
+      lead: {
+        inst: 'lute', vol: 0.05, res: 6,
+        notes:
+          'A4 . C5 . F5 . | E5 . D5 . C5 . | D5 . F5 . Bb5 . | A5 - - . . . | ' +
+          'F5 . A5 . D6 . | D6 . C6 . Bb5 . | G5 . A5 . Bb5 . | C6 - - . . . | ' +
+          'A5 . C6 . F6 . | E6 . C6 . A5 . | Bb5 . A5 . G5 . | F5 . D5 . Bb4 . | ' +
+          'G4 . Bb4 . D5 . | E5 . G5 . Bb5 . | A5 . G5 . E5 . | F5 - - . . .',
+      },
+      bass: { octave: 2, vol: 0.14, pattern: 'R . . . 5 . . . 5 . . .' },
+      arp: { octave: 4, vol: 0.013, wave: 'triangle', pattern: [0, null, 1, null, 2, null, 1, null, 2, null, 1, null] },
+      pad: { octave: 3, vol: 0.009, inst: 'strings' },
+      drums: { vol: 0.16, pattern: 'k . . . h . . . h . . .' },
+    },
+
     normalton: {
       title: 'Population: 31',
       bpm: 104, stepsPerBar: 16, swing: 0.16, restEvery: 4,
@@ -833,6 +857,48 @@
     chickenCluck(a, d, t) {   // bwak bwak BWAAAK
       for (let i = 0; i < 2; i++) a.tone(d, { wave: 'pulse25', freq: rand(620, 760), freqEnd: rand(480, 560), t: t + i * 0.1, dur: 0.05, vol: 0.03, release: 0.03 });
       a.tone(d, { wave: 'pulse25', freq: 860, freqEnd: 520, t: t + 0.24, dur: 0.16, vol: 0.03, release: 0.05 });
+    },
+    eat(a, d, t) {            // munch munch munch... gulp
+      for (let i = 0; i < 3; i++) a.noiseBurst(d, { t: t + i * 0.11, dur: 0.05, vol: 0.09, type: 'bandpass', freq: rand(900, 1500), Q: 1.4, release: 0.04 });
+      a.tone(d, { wave: 'sine', freq: 340, freqEnd: 170, t: t + 0.38, dur: 0.1, vol: 0.08, release: 0.06 });
+    },
+    knock(a, d, t) {          // knock knock knock (on a wooden door)
+      for (let i = 0; i < 3; i++) {
+        a.tone(d, { wave: 'sine', freq: 200, freqEnd: 120, t: t + i * 0.17, dur: 0.06, vol: 0.2, release: 0.06 });
+        a.noiseBurst(d, { t: t + i * 0.17, dur: 0.03, vol: 0.1, type: 'bandpass', freq: 800, Q: 2, release: 0.04 });
+      }
+    },
+    sleepJingle(a, d, t) {    // a little lullaby as you snuggle down
+      [523, 659, 784, 659, 523, 392, 523].forEach((f, i) => a.tone(d, { wave: 'triangle', freq: f, t: t + i * 0.2, dur: 0.22, vol: 0.05, attack: 0.02, release: 0.3 }));
+    },
+    rooster(a, d, t) {        // cock-a-doodle-DOOOO (it's morning)
+      const n = (f0, f1, at, dur) => a.tone(d, { wave: 'pulse25', freq: f0, freqEnd: f1, slideTime: dur, t: t + at, dur, vol: 0.035, attack: 0.01, release: 0.05, vibrato: 12, vibratoRate: 30 });
+      n(620, 820, 0, 0.12); n(780, 820, 0.16, 0.1); n(900, 1150, 0.3, 0.16); n(1250, 820, 0.5, 0.55);
+    },
+    gateCreak(a, d, t) {      // the east gate: a long, slow, wooden creeeeak
+      a.tone(d, { wave: 'sawtooth', freq: 96, freqEnd: 140, slideTime: 2.3, t, dur: 2.4, vol: 0.05, attack: 0.1, release: 0.3, vibrato: 18, vibratoRate: 9 });
+      a.noiseBurst(d, { t, dur: 2.4, vol: 0.04, type: 'bandpass', freq: 600, freqEnd: 900, Q: 6, attack: 0.2, release: 0.4 });
+      a.tone(d, { wave: 'square', freq: 310, freqEnd: 260, slideTime: 0.8, t: t + 0.9, dur: 0.8, vol: 0.012, attack: 0.1, release: 0.2, vibrato: 25, vibratoRate: 13 });
+    },
+    gateBoom(a, d, t) {       // ...and the doors hit the stops: THOOM
+      a.tone(d, { wave: 'sine', freq: 82, freqEnd: 38, t, dur: 0.5, vol: 0.26, release: 0.4 });
+      a.noiseBurst(d, { t, dur: 0.4, vol: 0.14, type: 'lowpass', freq: 900, freqEnd: 140, release: 0.35 });
+      a.noiseBurst(d, { t, dur: 0.05, vol: 0.08, type: 'bandpass', freq: 1400, Q: 1.5, release: 0.06 });
+    },
+    upgrade(a, d, t) {        // CLANG CLANG CLANG... and it's better
+      for (let i = 0; i < 3; i++) for (const f of [880, 1320, 1760]) a.tone(d, { wave: 'triangle', freq: f * rand(0.98, 1.02), t: t + i * 0.16, dur: 0.02, vol: 0.04, attack: 0.002, release: 0.3 });
+      for (let i = 0; i < 3; i++) a.noiseBurst(d, { t: t + i * 0.16, dur: 0.03, vol: 0.06, type: 'highpass', freq: 2600, release: 0.05 });
+      [1046, 1318, 1568, 2093].forEach((f, i) => a.tone(d, { wave: 'square', freq: f, t: t + 0.55 + i * 0.06, dur: 0.07, vol: 0.03, release: 0.2 }));
+    },
+    stairs(a, d, t) {         // clump clump clump up (or down) the wooden stairs
+      for (let i = 0; i < 4; i++) { a.tone(d, { wave: 'sine', freq: 150 + i * 12, freqEnd: 90, t: t + i * 0.13, dur: 0.05, vol: 0.12, release: 0.05 }); a.noiseBurst(d, { t: t + i * 0.13, dur: 0.02, vol: 0.05, type: 'bandpass', freq: 700, Q: 1.6, release: 0.03 }); }
+    },
+    fireCrackle(a, d, t) {    // the fire at the inn: pop... pop-pop
+      const n = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < n; i++) a.noiseBurst(d, { t: t + Math.random() * 0.25, dur: 0.008, vol: 0.05 * rand(0.5, 1), type: 'bandpass', freq: rand(1800, 4200), Q: 3, attack: 0.001, release: 0.015 });
+    },
+    cloth(a, d, t) {          // a hat comes off: fwip
+      a.noiseBurst(d, { t, dur: 0.16, vol: 0.06, type: 'bandpass', freq: 1400, freqEnd: 700, Q: 1.1, attack: 0.02, release: 0.1 });
     },
     villageGasp(a, d, t) {    // everyone in the square, all at once: *GASP*
       a.noiseBurst(d, { t, dur: 0.35, vol: 0.1, type: 'bandpass', freq: 850, freqEnd: 1300, Q: 2.2, attack: 0.03, release: 0.25 });

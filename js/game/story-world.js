@@ -15,7 +15,11 @@
  *   Beat it, and the far passage opens: a building site, a prototype lift, a big
  *   red button (DO NOT PRESS). It goes up. Very fast (js/game/sky-launch.js), and
  *   blasts you out into the sky; you come down in NORMALTON, where everyone stares,
- *   and guess who comes down after you, to guard the unfinished road out.
+ *   and guess who comes down after you (the road out east isn't finished).
+ *   Normalton: the Sleepy Goose (sleep the night away upstairs), Fenwick's food, Greta's armor,
+ *   Holt's upgrades. Switch on the square's Checkshot and the mayor will answer anything you ask...
+ *   and when you ask what was in that cave, he tells you what this world really is. He opens the
+ *   east gate for you; walk up to it, and the slime drops in. (The road STILL isn't finished.)
  */
 (function (ERX) {
   'use strict';
@@ -200,6 +204,7 @@
       if (g.objective) g.completeObjective();
       if (g.levelId === 'world1' && ERX.Items.has(g.character, 'vrd')) g.thinkAloud('The VRD is buzzing.', '#c89aff');
       yield 0.6;
+      if (g.levelId === 'village') { yield 0.8; villageObjective(g); }
       g.lockControls(false);
       return;
     }
@@ -468,6 +473,7 @@
       look: { gender: 1, skin: 1, hair: 4, hairColor: 1, eyes: 0, outfit: 5, outfitColor: 10, pants: 1, hat: 'chef' },
       lines: [
         ['Fresh buns! Still warm!', 'Not for you, though, dear. You would only land on them.'],
+        ['Fenwick has finally opened his shop! After eleven years!', 'I was so surprised I dropped a whole tray. Buns everywhere. The chickens were delighted.'],
         ['I bake two hundred buns every morning. Two hundred.', 'Nobody has ever asked who eats them all. Please do not be the first.'],
         ['You came down so hard my souffle fell.', 'Every souffle in the village fell. All at once. It was a very sad noise.'],
       ],
@@ -476,8 +482,23 @@
       name: 'FENWICK', pitch: 0.95,
       look: { gender: 0, skin: 3, hair: 0, hairColor: 0, eyes: 1, outfit: 3, outfitColor: 4, pants: 1, hat: 'cap' },
       lines: [
-        ['Goods! Wares! Things! All perfectly normal.', 'The shop opens tomorrow. It has opened tomorrow for eleven years.'],
-        ['I sell potions. Well. Coloured water. In potion bottles.', 'Business has never been better. Nobody has checked.'],
+        ['Goods! Wares! Things! All perfectly normal.', 'The shop was meant to open eleven years ago. Then YOU walked in. So I suppose it is open now.'],
+        ['I sell potions. Well. Coloured water. In potion bottles.', 'The food is real, though. I promise. Mostly.'],
+      ],
+    },
+    greta: {
+      name: 'GRETA', pitch: 1.0,
+      look: { gender: 1, skin: 4, hair: 3, hairColor: 0, eyes: 0, outfit: 3, outfitColor: 0, pants: 2 },
+      lines: [['Holt makes it, I sell it.', 'He is my little brother. He is seven feet tall. He is still my little brother.']],
+    },
+    tobias: {
+      name: 'OLD TOBIAS', pitch: 0.75,
+      look: { gender: 0, skin: 0, hair: 8, hairColor: 6, eyes: 4, outfit: 1, outfitColor: 10, pants: 3 },
+      lines: [
+        ['Zzz... five more minutes, Mum... zzz...'],
+        ['Zzz... no, Gerald... that is MY bun... zzz...'],
+        ['*SNORT*', '...Wha? Oh. It is you. The one from the sky.', '...Zzz.'],
+        ['Zzz... thirty-one... always thirty-one... zzz...'],
       ],
     },
     pip: {
@@ -527,6 +548,13 @@
   // (they talk the way the miners do: js/game/story-deep.js talk())
   Object.assign(ERX.Story.deep.MINERS, VILLAGERS);
   const villager = (id) => { const v = VILLAGERS[id]; return { name: v.name, color: '#ffd36a', plate: '#4a3a1a', voice: 'npc', pitch: v.pitch, speed: 44 }; };
+  /** The usual: the next set of a villager's lines. */
+  function* chat(g, npc) {
+    const v = VILLAGERS[npc.id], set = v.lines[(npc.talkIndex || 0) % v.lines.length];
+    npc.talkIndex = (npc.talkIndex || 0) + 1;
+    for (const line of set) yield* say(g, villager(npc.id), line);
+  }
+  function done(g, npc) { if (npc) npc.talking = false; g.dialogue.close(); g.lockControls(false); }
 
   /** Down in Normalton: a crater in the square, everyone staring... and guess who comes down after you. */
   function* villageArrival(g) {
@@ -573,14 +601,21 @@
       yield* say(g, SLIME(), 'But the road out of the east gate is NOT finished. Hard hat zone. Not past me.');
       g.dialogue.close();
       g.releaseCamera();
-      s.goX = L.slimeX; s.guard = true;                    // off it hops, to the gate (and there it stays)
+      s.goX = L.gateX - 24; s.guard = false; s.leaving = true;   // off it hops, east, to its road (behind the gate)
     }
     for (const n of g.npcs) { n.stay = false; n.watch = null; }
     g.music('normalton');
     ERX.Audio.setAmbience('village');
     g.banner = { title: 'NORMALTON', sub: 'Population: 31. Suspiciously normal.', t: 0, dur: 4.5 };
-    if (g.checkshot && !g.checkshot.on) g.setObjective('ACTIVATE THE CHECKSHOT', null, 1);
+    villageObjective(g);
     g.lockControls(false);
+  }
+  /** What you're meant to be doing in Normalton right now: the Checkshot, then the mayor, then the east gate. */
+  function villageObjective(g) {
+    const pr = g.character.progress || {};
+    if (g.checkshot && !g.checkshot.on) g.setObjective('ACTIVATE THE CHECKSHOT', null, 1);
+    else if (!pr.mayorTalk) g.setObjective('TALK TO THE MAYOR', null, 1);
+    else if (!pr.slimeGate) g.setObjective('THROUGH THE EAST GATE  →', null, 1);
   }
   /** Back down in Normalton (from the void, through its Checkshot... or out of the lift, again): it's getting to be a habit. */
   function* villageReturn(g) {
@@ -595,9 +630,323 @@
     g.music('normalton');
     ERX.Audio.setAmbience('village');
     g.banner = { title: 'NORMALTON', sub: 'Another crater. Lovely.', t: 0, dur: 3.5 };
-    if (g.checkshot && !g.checkshot.on) g.setObjective('ACTIVATE THE CHECKSHOT', null, 1);
+    villageObjective(g);
     g.lockControls(false);
   }
+
+  // ================================================== INSIDE: the Sleepy Goose, Fenwick's, Greta's... and Holt, at his anvil
+  /** Molly, behind the bar. */
+  function* mollyTalk(g, npc) {
+    const M = villager('molly');
+    npc.talking = true;
+    yield* say(g, M, npc.met ? 'Back again, love? What can I get you?' : 'Welcome to the Sleepy Goose! Best beds in Normalton. Only beds in Normalton. Still the best, though.');
+    npc.met = true;
+    for (;;) {
+      const i = yield* choose(g, ['Can I stay the night?', 'Tell me about Gerald.', "What's good here?", 'Bye!']);
+      if (i === 0) {
+        yield* say(g, M, 'Course you can! Upstairs, the bed on the left. On the house. You did fall out of the sky, after all.');
+        yield* say(g, M, 'Night time only, mind. Beds get cross if you sleep in them in the day.');
+        yield* say(g, M, "...That isn't true. I just like my afternoons quiet.");
+        yield* say(g, M, 'A good night in that bed and you will be right as rain. Fixes anything. Bumps, bruises, falling out of the sky.');
+      } else if (i === 1) {
+        yield* say(g, M, "Gerald was our goose. The Sleepy Goose's goose. He slept in the window every afternoon.");
+        yield* say(g, M, 'Then one morning he flew off east, over the gate. Never came back.');
+        yield* say(g, M, 'We do not talk about Gerald. ...I just did. Oh dear.');
+      } else if (i === 2) {
+        yield* say(g, M, 'Milk. More milk. Or, if you are feeling brave: no milk.');
+        yield* say(g, M, "For proper food, try Fenwick's, down the street. He's finally opened. Took him eleven years.");
+      } else break;
+    }
+    yield* say(g, M, 'Mind how you go!');
+    done(g, npc);
+  }
+  /** A shop (js/screens/shop.js): a word from the keeper, then the counter. The game waits while it's open. */
+  function* shop(g, npc, kind, title, hello) {
+    const v = villager(npc.id);
+    npc.talking = true;
+    if (hello && !npc.met) yield* say(g, v, hello);
+    npc.met = true;
+    g.dialogue.close();
+    ERX.Scenes.push('shop', { game: g, kind, title, keeper: { name: v.name, color: '#ffd36a' } });
+    yield 0.05;
+    done(g, npc);
+  }
+  const fenwickTalk = (g, npc) => shop(g, npc, 'food', "FENWICK'S GOODS", 'A CUSTOMER! An actual customer! In my actual shop! Come in, come in, look around!');
+  const gretaTalk = (g, npc) => shop(g, npc, 'armor', "GRETA'S ARMORY", 'Ah, the sky-faller! Holt said you might come in. He said you looked "squishy".');
+  /** Holt, at the anvil: he'll hit your armor until it's better. */
+  function* holtTalk(g, npc) {
+    const H = villager('holt'), Inv = ERX.Inventory;
+    npc.talking = true;
+    if (!Inv.armorPieces(g.character).length) {
+      yield* say(g, H, '*CLANG* ...Oh. Hello.');
+      yield* say(g, H, 'I upgrade armor. You have not got any. I cannot upgrade your shirt.');
+      yield* say(g, H, 'Greta sells it. Next door. She is my big sister. ...Do not tell her I said that nicely.');
+      return done(g, npc);
+    }
+    yield* say(g, H, npc.met ? '*CLANG* ...You again. Want something hit?' : '*CLANG* ...Oh. Hello. Want that armor of yours hit until it is better?');
+    npc.met = true;
+    const i = yield* choose(g, ['Upgrade my armor.', 'Just saying hi.']);
+    if (i !== 0) { yield* chat(g, npc); return done(g, npc); }
+    g.dialogue.close();
+    ERX.Scenes.push('shop', { game: g, kind: 'upgrade', title: "HOLT'S ANVIL", keeper: { name: VILLAGERS.holt.name, color: '#ff9a4a' } });
+    yield 0.05;
+    done(g, npc);
+  }
+  /** Old Tobias, fast asleep at his table. (He talks in his sleep.) */
+  function* tobiasTalk(g, npc) {
+    npc.talking = true;
+    yield* chat(g, npc);
+    done(g, npc);
+  }
+
+  // ---- knock knock (the houses you can't go into)
+  const KNOCKED = { farm: 'A CHICKEN', cat: 'THE CAT', bakery: 'A NOTE ON THE DOOR', end: 'SOMEONE INSIDE' };
+  const KNOCK_LINES = {
+    farm: [['BWAK.'], ['...BWAK?'], ['BWAAAAAK!', '(The chickens seem to live here now. Farmer Clover is outside. With the other chickens.)']],
+    cat: [['Mrrrow.'], ['...Mrrp.'], ['(The cat does not get up. The cat will never get up.)']],
+    bakery: [['BACK IN 5 MINUTES. - Rosa', '(The note is very, very old.)']],
+    end: [['We already have a goose, thank you!'], ['If this is about the crater, it was NOT us.'], ['Go away. We are having a perfectly normal day in here.']],
+  };
+  const KNOCK_COUNT = {};
+  function* knock(g, who) {
+    g.lockControls(true);
+    g.player.vx = 0;
+    sfx('knock');
+    yield 0.9;
+    const sets = KNOCK_LINES[who] || [['...']], k = KNOCK_COUNT[who] = ((KNOCK_COUNT[who] === undefined ? -1 : KNOCK_COUNT[who]) + 1);
+    const sp = who === 'bakery' ? ERX.Story.cave.SIGN : { name: KNOCKED[who] || '???', color: '#c8c0a8', plate: '#3a3428', voice: who === 'cat' || who === 'farm' ? null : 'npc', pitch: 1.1, speed: 40 };
+    if (who === 'farm') sfx('chickenCluck');
+    for (const line of sets[Math.min(k, sets.length - 1)]) yield* say(g, sp, line);
+    done(g);
+  }
+
+  // ---- the Sleepy Goose, upstairs: sleep the night away (and wake up fully healed)
+  const NOTE = { name: 'A NOTE ON THE PILLOW', color: '#e8c87a', plate: '#5a3e22', voice: null, speed: 80 };
+  const isNight = (tod) => tod >= 0.47 || tod < 0.02;   // (from dusk on, until just after sunrise)
+  function* sleep(g, bed) {
+    const L = g.level, p = g.player;
+    g.lockControls(true);
+    p.vx = 0;
+    if (!isNight(g.worldTod || 0)) {
+      sfx('read');
+      yield* say(g, NOTE, 'BEDS ARE FOR NIGHT TIME. It is not night time. Come back when the sun goes down. - Molly');
+      return done(g);
+    }
+    const i = yield* choose(g, ['Sleep until morning.', 'Not yet.']);
+    g.dialogue.close();
+    if (i !== 0) { g.lockControls(false); return; }
+    p.placeAt(bed.x, L.floorY);
+    p.vanishT = 99;                            // (you're the lump under the quilt)
+    L.sleeper = { t: 0 };
+    sfx('sleepJingle');
+    yield 2.0;
+    ERX.Scenes.transition('fade', 2.8, () => {
+      g.worldTod = 0.03;                       // ...and it's morning
+      L.L = ERX.World1Level.lightAt(g.worldTod);
+      g.darkness = L.darknessAt();
+      p.hp = p.maxHp; p.mp = p.maxMp; g.hpShown = p.hp;
+    }, { silent: true });
+    yield 0.05;                                // (the game waits out the fade)
+    sfx('rooster');
+    yield 1.6;
+    L.sleeper = null;
+    p.vanishT = 0;
+    p.vy = -150;
+    p.facing = 1;
+    g.floatText(p.cx, p.y - 8, 'FULLY RESTED!', '#7af0a0');
+    sfx('revive');
+    yield 0.5;
+    g.lockControls(false);
+  }
+
+  // ================================================== THE MAYOR: ask him anything (once the square's Checkshot is on)
+  const MAYOR_Q = [
+    {
+      q: 'Why is this town called Normalton?',
+      a: ['Because it is NORMAL! Perfectly, completely, entirely normal.', 'We voted on the name. Thirty-one votes to none. A very normal vote.', 'Before that it was called Normalton as well. We like things to stay the same.'],
+      after: ['We named it ourselves, you know. "Normalton."', 'I think we were trying to convince somebody. ...Mostly ourselves.'],
+    },
+    {
+      q: 'Why are there only 31 people here?',
+      a: ['Thirty-one is a wonderful number! A prime. It cannot be divided. Much like our community.', 'We were thirty-two, once. Counting Gerald.', '...Gerald was a goose.'],
+      after: ['There have always been thirty-one of us. There always will be.', '...Unless somebody seals that Pillar. Then, who knows? Perhaps there will be thirty-two.'],
+    },
+    {
+      q: 'Who is Gerald?',
+      a: ["Gerald was the Sleepy Goose's goose. He slept in Molly's window every afternoon. Sweet bird. Bit bitey.", 'One morning, he spread his wings and flew off. East. Over the gate.', 'He never came back. Molly still leaves the window open for him.'],
+    },
+    {
+      q: "What's with the grumpy slime?",
+      a: ['The construction slime? It turned up one day with a hard hat and a clipboard, and started building a road.', 'Nobody asked it to. Nobody knows who pays it. It will not say.', 'Very good at its job, though. Whatever its job is.'],
+    },
+    {
+      q: "What's past the east gate?",
+      a: ['The road east. Or it will be, once it is finished.', 'Past that? Fields. Hills. More fields.', 'Nobody goes past the east gate, really. There is simply no reason to.', '......None at all.'],
+      after: ['The road. The fields. And, a very long way past them, the Pillar.', 'Go carefully.'],
+    },
+  ];
+  function* mayorTalk(g, npc) {
+    const pr = () => g.character.progress || {}, M = villager('bramble');
+    npc.talking = true;
+    npc.stay = true;
+    // (before the Checkshot's on: the usual pleasantries)
+    if (!pr().checkshotVillage) { yield* chat(g, npc); npc.stay = false; return done(g, npc); }
+    if (!pr().mayorMet) {
+      npc.bubble = 'bang'; npc.bubbleT = 1.2;
+      yield* say(g, M, 'Ah! Our sky-faller! I see you have woken up the old stone in the square. It is GLOWING. It has never glowed before!');
+      yield* say(g, M, 'Well. You must have questions. Visitors always do. Not that we get visitors. You are the first.');
+      yield* say(g, M, 'Ask me anything! The mayor is always in. Mostly because there is nowhere else to be.');
+      g.saveFlag('mayorMet');
+    } else yield* say(g, M, pr().mayorTalk ? 'Still here? Good. Ask away.' : 'Back again! Ask away. I have all day. I have had all day for a very long time.');
+    for (;;) {
+      const labels = MAYOR_Q.map((q) => q.q);
+      labels.push(pr().mayorTalk ? 'Tell me about the Julforic Pillar.' : '{red}What was in that cave?{/}', 'Goodbye.');
+      const i = yield* choose(g, labels);
+      if (i === labels.length - 1) break;
+      if (i < MAYOR_Q.length) {
+        const q = MAYOR_Q[i];
+        for (const line of pr().mayorTalk && q.after ? q.after : q.a) yield* say(g, M, line);
+        continue;
+      }
+      if (pr().mayorTalk) {
+        yield* say(g, M, 'Far to the east, past the end of the road. Its light makes this world shine... and its shadow makes the monsters.');
+        yield* say(g, M, 'Seal it, and perhaps the light will finally be just light. And the dark will just be dark.');
+        yield* say(g, M, 'And be careful. I did mention careful?');
+        continue;
+      }
+      yield* caveStory(g, npc);
+      return;
+    }
+    yield* say(g, M, 'Good day to you! Do mind the crater.');
+    npc.stay = false;
+    done(g, npc);
+  }
+
+  /** "What was in that cave?" The mayor goes very quiet... and tells you what this world really is. */
+  function* caveStory(g, npc) {
+    const M = villager('bramble'), V = VILLAGERS.bramble;
+    // a cave? what cave?
+    npc.bubble = 'what'; npc.bubbleT = 1.6;
+    yield* say(g, M, '...Cave?');
+    yield* say(g, M, 'What cave?');
+    yield* say(g, M, 'Oh, you mean the OLD cave? Out west, past the fog? That has been boarded up since before I was mayor.');
+    yield* say(g, M, 'Why? Did something happen in there?');
+    yield* choose(g, ['There was a monster with blue eyes in the cave and it sent me down to the depths below the village. Then I had to fight a zombie with blue flames.']);
+    // the music stops dead, and so does he
+    g.dialogue.close();
+    ERX.Audio.cutMusic();
+    ERX.Audio.setAmbience(null);
+    npc.watch = g.player.cx;
+    yield 2.6;
+    yield* say(g, M, '......', { speed: 4 });
+    yield* say(g, M, 'Did it... say anything? Before it dropped you?', { speed: 30 });
+    yield* choose(g, ['It just told me to "Leave".']);
+    g.dialogue.close();
+    yield 1.4;
+    yield* say(g, M, '...Leave.', { speed: 14 });
+    yield* say(g, M, 'Of course it did.');
+    // he takes off his hat
+    npc.look = Object.assign({}, V.look, { hat: undefined });
+    sfx('cloth');
+    yield 1.0;
+    yield* say(g, M, 'Have you noticed how bright everything is here? The grass. The sky. The flowers.');
+    yield* say(g, M, 'All just a little too bright? Like a painting somebody keeps touching up?');
+    yield* say(g, M, 'That is the light of the {red}JULFORIC PILLAR{/}.');
+    yield* say(g, M, 'It stands far to the east, past the end of the road. It was there before the village. Before anything.');
+    yield* say(g, M, 'Its light gets into everything. The colours. The weather. The people. It makes this whole world shine like a new coin.');
+    yield* say(g, M, 'But a light that bright throws a shadow just as deep.');
+    yield* say(g, M, 'The light is up here, with us. The shadow is down there. Under the village. Under everything.');
+    yield* say(g, M, 'That is where the monsters come from. The things in the dark. The blue fire. That is where YOU were.');
+    yield 0.6;
+    yield* say(g, M, 'This world is not sunshine and rainbows, my friend. It only looks that way.');
+    yield* say(g, M, 'And Normalton is not exactly... "normal".');
+    yield* say(g, M, 'There have always been thirty-one of us. Always. Nobody is ever born. Nobody grows old. Nobody ever leaves.');
+    yield* say(g, M, 'Rosa bakes two hundred buns every morning. By the next morning, they are gone. Nobody has ever eaten one.');
+    yield* say(g, M, 'I have been the mayor of this village for three hundred and twelve years.');
+    yield* say(g, M, 'The only one who ever left was Gerald. He flew east one morning, towards the Pillar. He never came back.');
+    yield* say(g, M, 'And whatever is behind those bars in the old cave... I think it has been telling people to leave for a very long time.');
+    const i = yield* choose(g, ["I was actually sent here to go seal the Julforic Pillar in this world, so I'll go seal it.", "Once I'm fully prepared, I can go seal the Julforic Pillar in this world."]);
+    if (i === 0) {
+      yield* say(g, M, '...Seal it.');
+      yield* say(g, M, 'Do you know, I have waited three hundred and twelve years for somebody to say that.');
+    } else {
+      yield* say(g, M, 'Prepared. Yes. Good. That is the most sensible thing anybody has said to me in three hundred years.');
+      yield* say(g, M, 'Buy some armor from Greta. Have Holt hit it until it is better. Eat something. Sleep at the Sleepy Goose.');
+    }
+    npc.look = null;                            // (the hat goes back on)
+    yield 0.4;
+    yield* say(g, M, 'Then I shall open the east gate for you.');
+    yield* say(g, M, 'But listen to me. The road east is dangerous. More dangerous than the cave. More dangerous than the dark under the village.');
+    yield* say(g, M, 'Whatever is out there has had a very long time to get ready for you.');
+    yield* say(g, M, 'So be careful. Be VERY careful.');
+    yield* say(g, M, 'Normalton does not get many visitors. We would quite like to keep this one.');
+    g.dialogue.close();
+    g.saveFlag('mayorTalk');
+    // the music comes back...
+    g.music('normalton');
+    ERX.Audio.setAmbience('village');
+    yield 0.8;
+    // ...and the east gate swings open
+    yield* say(g, M, 'OPEN THE EAST GATE!', { effect: 'shake' });
+    g.dialogue.close();
+    yield* openGate(g);
+    npc.stay = false; npc.watch = null;
+    done(g, npc);
+  }
+  /** The camera goes over to the east gate: the bar lifts, the doors swing open. (They stay open.) */
+  function* openGate(g) {
+    const L = g.level;
+    if (!L.gate) return;
+    g.lockControls(true);
+    g.focusCamera(L.gate.x0 + 18, L.floorY - 50);
+    yield 1.9;
+    L.openGate(g);
+    yield () => (L.gate.state === 'open' ? true : undefined);
+    g.saveFlag('gatesOpen');
+    yield 1.3;
+    g.releaseCamera();
+    yield 0.9;
+    g.setObjective('THROUGH THE EAST GATE  →', null, 1);
+  }
+
+  /** You walk up to the open gate... *whistle* ...guess who. */
+  function* slimeGate(g) {
+    const L = g.level, p = g.player, s = g.npcs.find((n) => n.id === 'slime');
+    g.lockControls(true);
+    p.vx = 0;
+    if (s) {
+      g.focusCamera(L.slimeX - 24, L.floorY - 40);
+      s.hidden = false; s.x = L.slimeX; s.y = L.floorY - 320; s.vy = 0; s.falling = true; s.goX = null; s.guard = false; s.leaving = false;
+      sfx('slimeWhistle');
+      yield () => (s.falling ? undefined : true);
+      sfx('crash');
+      g.shake(4, 0.35);
+      s.guard = true;
+      yield 1.0;
+      yield* say(g, SLIME(), "...Oh, no you don't.");
+      yield* say(g, SLIME(), 'The mayor opened the gate. How NICE. For YOU.');
+      s.angry = true;
+      yield* say(g, SLIME(), 'The road is STILL. NOT. FINISHED!', { effect: 'shake' });
+      yield* say(g, SLIME(), 'Do you see this hat? This is a HARD HAT. This is a HARD HAT ZONE.', { effect: 'shake' });
+      s.angry = false;
+      yield* say(g, SLIME(), 'Seal the Pillar? Lovely. Great. Not on MY road. Not until it is finished.');
+      yield* say(g, SLIME(), 'Come back when the road is done. Which will be... soon. Ish.');
+      yield* say(g, SLIME(), '...Go and buy a bun or something.');
+      g.dialogue.close();
+      g.releaseCamera();
+    }
+    g.saveFlag('slimeGate');
+    if (g.objective) g.completeObjective();
+    g.lockControls(false);
+  }
+
+  // (the villagers who have more to say than a line or two)
+  VILLAGERS.molly.talk = mollyTalk;
+  VILLAGERS.fenwick.talk = fenwickTalk;
+  VILLAGERS.greta.talk = gretaTalk;
+  VILLAGERS.holt.talk = holtTalk;
+  VILLAGERS.tobias.talk = tobiasTalk;
+  VILLAGERS.bramble.talk = mayorTalk;
 
   // ================================================== the slime, if you insist on talking to it
   const SLIME_LINES = {
@@ -610,6 +959,7 @@
       ['There is a CRATER in the SQUARE. The mayor wants a PLAQUE.'],
       ['You went up four thousand metres in a prototype lift. And came back down without it.', 'Show-off.'],
       ['The east road goes to... places. Unfinished places. Go and pet a chicken.'],
+      ['The mayor opened the gate. The MAYOR. Who does he think he is? ...The mayor. Fine.'],
       ['Somewhere out there is a goose called Gerald. He is not your problem.', 'He is also not past me.'],
     ],
   };
@@ -623,5 +973,5 @@
     g.lockControls(false);
   }
 
-  ERX.Story.world = { vrd, jump, world1Arrival, checkshot, theBars, deeperArrival, trialStart, trialDone, skullCollapse, abyssArrival, abyssBoss, abyssAfter, liftGo, villageArrival, villageReturn, slimeTalk, VILLAGERS, EYES };
+  ERX.Story.world = { vrd, jump, world1Arrival, checkshot, theBars, deeperArrival, trialStart, trialDone, skullCollapse, abyssArrival, abyssBoss, abyssAfter, liftGo, villageArrival, villageReturn, villageObjective, slimeTalk, slimeGate, knock, sleep, openGate, VILLAGERS, EYES };
 })(window.ERX = window.ERX || {});

@@ -368,15 +368,15 @@
     npc.visited = true;
     for (;;) {
       yield* say(g, B, 'You have {gold}' + (c.gold || 0) + 'G{/}. What will it be?');
-      const items = ERX.Armor.list;
-      const labels = items.map((a) => (c.armor === a.id ? '[WORN] ' : Inv.has(c, item(a)) ? '[OWNED] ' : '') + a.name + '  ' + a.price + 'G  +' + a.def + ' DEF');
+      const items = ERX.Armor.shop();      // (hers: Normalton's armory sells the rest)
+      const labels = items.map((a) => (c.armor === a.id ? '[WORN] ' : Inv.hasArmor(c, a.id) ? '[OWNED] ' : '') + a.name + '  ' + a.price + 'G  +' + a.def + ' DEF');
       labels.push('Just looking.');
       const i = yield* choose(g, labels);
       if (i >= items.length) { yield* say(g, B, 'Come back when you want to be less squishy.'); break; }
       const a = items[i];
       if (c.armor === a.id) { yield* say(g, B, "You're already wearing that. It looks great. Trust me. I'm a professional."); continue; }
-      if (Inv.has(c, item(a))) {
-        Inv.equip(c, item(a));
+      if (Inv.hasArmor(c, a.id)) {
+        Inv.equip(c, Inv.armorPieces(c).find((o) => Inv.armorId(o.id) === a.id).id);
         ERX.Saves.update(c);
         sfx('select');
         yield* say(g, B, 'Swapped! ' + a.name + ' equipped.');

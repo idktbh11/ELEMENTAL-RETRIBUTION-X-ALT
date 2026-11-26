@@ -13,6 +13,8 @@
  *   buildings, villagers and critters.
  *
  *   level.folk           where the villagers stand and what they do (their looks + lines: story-world.js)
+ *   level.marks.doors    every front door: enter (a room inside: js/game/level-interior.js) or knock (who answers: story-world.js)
+ *   level.gate           the east gate's doors: shut until the mayor has them opened (openGate), then open for good
  *   level.crater         where you came down (drawn in the square from then on)
  *   level.checkshotX     the village's Checkshot, in the square (drawn and used like World 1's: game-screen.js)
  *   VillageLevel.folkUpdate / folkDraw   the game screen calls these for each villager
@@ -58,29 +60,29 @@
     land: 65,                   // where you come down: the middle of the square
     checkshot: 67.6,            // the village's Checkshot, in the square (the game screen draws it)
     spawn: 60,                  // back from a save: here
-    slime: 110.9,               // where the grumpy slime stands guard
+    slime: 114.35,              // where the grumpy slime stands guard (in the east gateway, once it's open)
   };
   // the buildings: x (left wall, tiles), w (tiles) and how they look
   const BUILD = [
     { kind: 'barn', x: 6.5, w: 8 },
-    { kind: 'house', x: 22.5, w: 6, floors: 1, wall: 0, roof: 1, shutter: 2, timber: true, door: 0.3, chimney: 0.72, flowers: true },
-    { kind: 'house', x: 29.5, w: 5.5, floors: 2, wall: 3, roof: 0, shutter: 0, door: 0.55, chimney: 0.24 },
-    { kind: 'shop', x: 36, w: 7, floors: 2, wall: 2, roof: 3, shutter: 2, timber: true, door: 0.3, chimney: 0.76, sign: 'bread', awning: '#c84a3a', name: 'BAKERY' },
-    { kind: 'shop', x: 45, w: 6, floors: 1, wall: 4, roof: 2, shutter: 3, timber: true, door: 0.62, chimney: 0.25, sign: 'potion', awning: '#3e8a4e', name: 'GOODS' },
-    { kind: 'shop', x: 79, w: 9.5, floors: 2, wall: 1, roof: 4, shutter: 4, timber: true, door: 0.5, chimney: 0.18, chimney2: 0.84, sign: 'mug', awning: '#8a4a7e', dormer: true, name: 'THE SLEEPY GOOSE' },
+    // (enter: the room you walk into, js/game/level-interior.js; knock: who answers, story-world.js knock())
+    { kind: 'house', x: 22.5, w: 6, floors: 1, wall: 0, roof: 1, shutter: 2, timber: true, door: 0.3, chimney: 0.72, flowers: true, knock: 'farm' },
+    { kind: 'house', x: 29.5, w: 5.5, floors: 2, wall: 3, roof: 0, shutter: 0, door: 0.55, chimney: 0.24, knock: 'cat' },
+    { kind: 'shop', x: 36, w: 7, floors: 2, wall: 2, roof: 3, shutter: 2, timber: true, door: 0.3, chimney: 0.76, sign: 'bread', awning: '#c84a3a', name: 'BAKERY', knock: 'bakery' },
+    { kind: 'shop', x: 45, w: 6, floors: 1, wall: 4, roof: 2, shutter: 3, timber: true, door: 0.62, chimney: 0.25, sign: 'potion', awning: '#3e8a4e', name: 'GOODS', enter: 'goods' },
+    { kind: 'shop', x: 79, w: 9.5, floors: 2, wall: 1, roof: 4, shutter: 4, timber: true, door: 0.5, chimney: 0.18, chimney2: 0.84, sign: 'mug', awning: '#8a4a7e', dormer: true, name: 'THE SLEEPY GOOSE', enter: 'inn' },
     { kind: 'smithy', x: 90.5, w: 6.5 },
-    { kind: 'house', x: 98.5, w: 5, floors: 1, wall: 2, roof: 5, shutter: 1, timber: true, door: 0.68, chimney: 0.3, flowers: true },
-    { kind: 'house', x: 104, w: 5, floors: 2, wall: 0, roof: 1, shutter: 3, door: 0.4, chimney: 0.66, flowers: true },
+    { kind: 'shop', x: 98.5, w: 5, floors: 1, wall: 3, roof: 5, shutter: 1, timber: true, door: 0.3, chimney: 0.72, sign: 'shield', awning: '#4a6ab4', name: 'ARMORY', enter: 'armory' },
+    { kind: 'house', x: 104, w: 5, floors: 2, wall: 0, roof: 1, shutter: 3, door: 0.4, chimney: 0.66, flowers: true, knock: 'end' },
   ];
   // the villagers (their looks and what they say: story-world.js, VILLAGERS)
   const FOLK = [
     { id: 'clover', x: 18, mode: 'wander', range: [9, 22], speed: 16, facing: -1 },
     { id: 'rosa', x: 40.5, mode: 'idle', facing: 1 },
-    { id: 'fenwick', x: 49.5, mode: 'idle', facing: -1 },
     { id: 'bramble', x: 60, mode: 'wander', range: [55, 65.5], speed: 12, facing: 1 },
     { id: 'pip', x: 74.6, mode: 'sit', facing: -1 },
-    { id: 'molly', x: 86, mode: 'idle', facing: -1 },
     { id: 'holt', x: 93.2, mode: 'smith', facing: 1 },
+    // (Fenwick's behind his counter, Molly's behind her bar, Greta's in her armory: level-interior.js)
     { id: 'timmy', x: 101, mode: 'wander', range: [95, 107.5], speed: 46, facing: 1 },
   ];
 
@@ -96,6 +98,7 @@
     mug: ['#####..', '#...###', '#...#.#', '#...###', '#...#..', '#####..'],
     potion: ['..##...', '..##...', '.####..', '######.', '######.', '.####..'],
     anvil: ['#######', '.#####.', '..###..', '..###..', '.#####.', '.......'],
+    shield: ['#######', '###.###', '#.....#', '###.###', '.##.##.', '..#.#..', '...#...'],
   };
 
   const textW = (s) => (ERX.Font && ERX.Font.measure ? ERX.Font.measure(s) : s.length * 6);
@@ -168,7 +171,7 @@
     const lx = o.door > 0.5 ? dx - 6 : dx + dw + 5, ly = dy + 2;
     R(b, lx - 1, ly - 2, 3, 1, IRON[1]); R(b, lx - 2, ly - 1, 5, 7, IRON[2]); R(b, lx - 1, ly, 3, 5, '#e8d8a0'); S(b, lx, ly + 1, '#fff4c8');
     out.lamps.push({ x: lx, y: ly + 2, r: 26 });
-    out.doors.push({ x: dx + dw / 2, y: gy });
+    out.doors.push({ x: dx + dw / 2, y: gy, enter: o.enter || null, knock: o.knock || null });
     // the windows (none where the door is)
     for (let f = 0; f < o.floors; f++) {
       const fy = gy - found - (f + 1) * FH, slots = Math.max(1, Math.floor((W - 6) / 26));
@@ -432,6 +435,7 @@
       this.surfRow = MAP.surf;
       for (let x = 0; x < this.W; x++) for (let y = this.surfRow; y < this.H; y++) this.setTile(x, y, ROCK);
       this.solid(MAP.east, this.W, 0, this.H);
+      this.interactFirst = true;         // (its doors come before whoever's walking past them: game-screen.js)
       this.westX = Math.round(1.5 * TS);  // walk on past here (over the rubble), and you're back in World 1, by the old cave
       this.floorY = this.surfRow * TS;
       this.landX = MAP.land * TS + 8;
@@ -466,6 +470,23 @@
       this.grass = null;
       this.critters = [];
       this.marks = { windows: [], chimneys: [], lamps: [], doors: [], texts: [] };   // filled by renderBackWall
+    }
+
+    /**
+     * From what you've done: the east gate's open if the mayor's had it opened. (Not World 1's prepare: no rubble here.)
+     * The doors hang between the gate's posts (paintConstruction): x0..x1.
+     */
+    prepare(g) {
+      const pr = (g.character && g.character.progress) || {};
+      const X = this.gateX, open = !!(pr.gatesOpen || pr.mayorTalk);   // (the mayor's word is enough, even if you left before it swung open)
+      this.gate = { x0: X + 3, x1: X + 40, open: open ? 1 : 0, bar: open ? 1 : 0, state: open ? 'open' : 'shut', t: 0 };
+    }
+    /** The mayor's word: the bar lifts, and the east gate swings open (it stays open from then on). */
+    openGate() {
+      const G = this.gate;
+      if (!G || G.state !== 'shut') return;
+      G.state = 'unbar'; G.t = 0;
+      sfx('gateClang');
     }
 
     /** No fog in Normalton. (Just a perfectly normal amount of air.) */
@@ -643,6 +664,18 @@
       ERX.World1 = ERX.World1 || {};
       ERX.World1.night = Lt.night;
       const p = g.player;
+      // the east gate: shut tight (nobody gets past), or opening (the bar comes up, the doors swing out)
+      const G = this.gate;
+      if (G) {
+        G.t += dt;
+        if (G.state === 'unbar') { G.bar = Math.min(1, G.t / 0.8); if (G.t >= 0.9) { G.state = 'opening'; G.t = 0; sfx('gateCreak'); } }
+        else if (G.state === 'opening') {
+          const k = Math.min(1, G.t / 2.4);
+          G.open = k * k * (3 - 2 * k);
+          if (k >= 1) { G.state = 'open'; G.open = 1; sfx('gateBoom'); ERX.FX.shake(2, 0.3); g.dust(G.x0 + 2, this.floorY, 8); g.dust(G.x1 - 2, this.floorY, 8); }
+        }
+        if (G.open < 0.6 && p.x + p.w > G.x0 + 1) { p.x = G.x0 + 1 - p.w; if (p.vx > 0) p.vx = 0; }
+      }
       for (const c of this.critters) {
         c.ph += dt;
         if (c.kind === 'fly') { c.x += (c.vx + Math.sin(c.ph * 0.7) * 14) * dt; c.y += Math.sin(c.ph * 2.3) * 12 * dt; if (c.x < c.x0 || c.x > c.x1) c.vx = -c.vx; }
@@ -708,6 +741,7 @@
         }
       }
       this.grass.render(ctx, t, ox, oy, wind);
+      if (this.gate) this._drawGate(ctx, ox, oy, Lt);
       // smoke
       for (const s of this.smoke) {
         const k = s.t / s.life, r = 1 + k * 4, x = s.x + ox, y = s.y + oy;
@@ -736,6 +770,40 @@
           if (Math.floor(t * 0.8) % 3 === 0) { ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.7; ctx.fillRect(x + 4, y - fr.r.height - 3 - Math.floor((t * 2) % 3), 2, 1); ctx.globalAlpha = 1; }   // zzz
         }
       }
+    }
+
+    /** The east gate's doors: planks and iron bands, swinging out on their hinges (each door narrows to its post). */
+    _drawGate(ctx, ox, oy, Lt) {
+      const G = this.gate, gy = this.floorY + oy, h = 36, half = (G.x1 - G.x0) / 2;
+      const tint = (col) => C.mix(col, '#1a2040', Lt ? Lt.night * 0.55 : 0);
+      for (const side of [-1, 1]) {
+        const hinge = side < 0 ? G.x0 : G.x1, w = Math.max(2, Math.round(half * Math.cos(G.open * Math.PI * 0.47)));
+        const x = Math.round(side < 0 ? hinge + ox : hinge + ox - w);
+        ctx.fillStyle = tint('#2a1a12'); ctx.fillRect(x - 1, gy - h - 1, w + 2, h + 1);
+        for (let i = 0; i < w; i++) { const k = side < 0 ? i : w - 1 - i; ctx.fillStyle = tint(k % 6 === 0 ? WOOD[3] : k % 6 === 1 ? WOOD[1] : WOOD[2]); ctx.fillRect(x + i, gy - h, 1, h); }
+        ctx.fillStyle = tint(IRON[1]); ctx.fillRect(x, gy - h + 7, w, 2); ctx.fillRect(x, gy - 12, w, 2);
+        if (w > 6) { ctx.fillStyle = tint(IRON[0]); for (const yy of [gy - h + 7, gy - 12]) ctx.fillRect(side < 0 ? x + 1 : x + w - 3, yy, 2, 2); }
+        ctx.fillStyle = tint(WOOD[0]); ctx.fillRect(x, gy - h, w, 1);
+      }
+      // the bar across them (it lifts first)
+      if (G.bar < 1) {
+        const by = gy - 22 - Math.round(G.bar * 12);
+        ctx.fillStyle = tint('#2a1a12'); ctx.fillRect(G.x0 + ox - 3, by - 1, G.x1 - G.x0 + 6, 5);
+        ctx.fillStyle = tint(WOOD[1]); ctx.fillRect(G.x0 + ox - 2, by, G.x1 - G.x0 + 4, 3);
+        ctx.fillStyle = tint(WOOD[0]); ctx.fillRect(G.x0 + ox - 2, by, G.x1 - G.x0 + 4, 1);
+      }
+    }
+
+    /** Front doors: in you go (the inn, the goods store, the armory), or knock and see who answers. */
+    interact(g) {
+      const p = g.player;
+      if (!p.onGround) return null;
+      for (const d of this.marks.doors) {
+        if (Math.abs(p.cx - d.x) > 9 || !(d.enter || d.knock)) continue;
+        if (d.enter) return { x: d.x, y: this.floorY - 34, text: '{use} ENTER', act: (gg) => { sfx('doorOpen'); gg.player.controls = false; gg.travel(d.enter, { at: 'door' }, 'door'); } };
+        return { x: d.x, y: this.floorY - 34, text: '{use} KNOCK', act: (gg) => gg.runScript((g2) => ERX.Story.world.knock(g2, d.knock)) };
+      }
+      return null;
     }
 
     /** Lamps and windows at night, the forge always. */
@@ -796,7 +864,7 @@
     else if (n.mode === 'sit') { pose = 'sit'; frame = 0; }
     else if (n.mode === 'smith' && !n.talking && far) { const ph = n.t % 0.9; pose = 'attack'; frame = ph < 0.35 ? 0 : ph < 0.55 ? 1 : 2; }
     const x = Math.round(n.x) - cam.ix, y = Math.round(n.y) - cam.iy;
-    PS.draw(c, PS.frame(v.look, pose, frame, facing), x, y, facing);
+    PS.draw(c, PS.frame(n.look || v.look, pose, frame, facing), x, y, facing);
     if (pose === 'attack') {
       // the hammer in the smith's fist
       const hx = x + facing * (frame === 1 ? 13 : frame === 0 ? -3 : 10), hy = y - (frame === 0 ? 21 : 13);

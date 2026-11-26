@@ -201,6 +201,14 @@
       else ERX.Inventory._put(this.c, H.id, H.n);
       this._changed();
     }
+    /** [USE] on a food: eat one (js/game/game-screen.js eat). */
+    _eat(k) {
+      const s = typeof k === 'number' ? this.c.inv[k] : null, it = s && ERX.Items.get(s.id);
+      if (!it || !it.food || this.held) return;
+      const p = this.game.player;
+      if (p.hp >= p.maxHp) { sfx('deny'); this._nope(k); return; }
+      this.game.eat(s.id, false);
+    }
     /** A little shake on a slot that refused something. */
     _nope(k) { this.shake = { k, t: 0.25 }; }
 
@@ -221,6 +229,7 @@
       if (m.moved && this.hover !== null) this.sel = this.hover;   // the keyboard cursor follows the mouse
       if (this.hover !== null && (m.pressed[0] || m.pressed[2])) this._click(this.hover, m.pressed[2], shift);
       for (let i = 1; i <= 9; i++) if (input.pressed.has('Digit' + i) || input.pressed.has('Numpad' + i)) this._swapHot(this.hover !== null ? this.hover : this.sel, i - 1);
+      if (ERX.Keybinds.wasPressed('use')) this._eat(this.hover !== null ? this.hover : this.sel);
       const b = this.backBtn;
       if (m.moved && b.contains(m.x, m.y)) this.sel = 'back';
       if (m.pressed[0] && b.contains(m.x, m.y)) b.activate();
@@ -323,7 +332,7 @@
       if (!it) return;
       const worn = typeof k === 'string' && this.c.equip[k] === s.id;
       const lines = F.wrap(it.desc, 130).slice(0, 4);
-      const tag = (it.tag || '') + (worn ? '  [WORN]' : '');
+      const tag = (it.tag || '') + (worn ? '  [WORN]' : '') + (it.food ? '   ' + ERX.keyText('{use}') + ' EAT' : '');
       const w = Math.max(F.measure(it.name), F.measure(tag), 130) + 10, h = 14 + (tag ? 9 : 0) + lines.length * 8 + 4;
       const at = this.slots.find((q) => q.k === k);
       let x = (at ? at.x + CELL + 4 : 0), y = at ? at.y - 2 : 0;

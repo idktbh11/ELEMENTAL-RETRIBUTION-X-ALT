@@ -218,9 +218,13 @@
     }
 
     _drawChoices(ctx, W, b, labels, index, isInterrupt) {
-      const lw = Math.min(W - 24, Math.max.apply(null, labels.map((l) => F.measure(l))) + 30);
-      const lh = 13;
-      const h = labels.length * lh + 10 + (isInterrupt ? 10 : 0);
+      // (a choice too long for one line wraps onto more)
+      const room = Math.max(80, W - 24 - 30);
+      const rows = labels.map((l) => (F.measure(l) > room ? F.wrap(l, room) : [l]));
+      const lw = Math.min(W - 24, Math.max.apply(null, rows.map((ls) => Math.max.apply(null, ls.map((l) => F.measure(l))))) + 30);
+      const lh = 13, more = 10;
+      const rowH = (ls) => lh + (ls.length - 1) * more;
+      const h = rows.reduce((n, ls) => n + rowH(ls), 0) + 10 + (isInterrupt ? 10 : 0);
       const x = Math.round(b.x + b.w - lw);
       const y = this.position === 'top'
         ? Math.round(b.y + (this.mode === 'say' ? b.h + 6 : 0))
@@ -234,13 +238,13 @@
         yy += 10;
       }
       this._choiceRects = [];
-      labels.forEach((l, i) => {
-        const sel = i === index;
-        this._choiceRects.push({ x: x + 4, y: yy - 2, w: lw - 8, h: lh });
-        if (sel) T.rect(ctx, x + 4, yy - 2, lw - 8, lh - 1, 'rgba(255,211,77,0.15)');
+      rows.forEach((ls, i) => {
+        const sel = i === index, rh = rowH(ls);
+        this._choiceRects.push({ x: x + 4, y: yy - 2, w: lw - 8, h: rh });
+        if (sel) T.rect(ctx, x + 4, yy - 2, lw - 8, rh - 1, 'rgba(255,211,77,0.15)');
         if (sel) T.drawArrow(ctx, x + 7 + Math.round(Math.sin(this.t * 8)), yy, 1, T.gold);
-        F.draw(ctx, l, x + 16, yy + 1, { color: sel ? T.gold : T.text, shadow: T.ink });
-        yy += lh;
+        ls.forEach((l, k) => F.draw(ctx, l, x + 16, yy + 1 + k * more, { color: sel ? T.gold : T.text, shadow: T.ink }));
+        yy += rh;
       });
     }
   }

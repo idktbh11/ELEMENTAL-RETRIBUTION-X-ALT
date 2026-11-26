@@ -7,7 +7,9 @@
  * Item ids come from js/data/items.js ('vrd', 'armor:leather', ...). An older save's items / armour move
  * into the bag the first time it's touched, and the older fields stay up to date for the code that reads
  * them: character.items (ids of what you carry), character.armorOwned and character.armor (the chest
- * piece you wear, which is what the player sprite and the damage maths look at).
+ * piece you wear). Those two keep plain armour ids: Holt's upgrades ('armor:iron_helm+2') count as the piece.
+ *
+ * FOOD: eat(c, id) takes one and says how much it heals; bestFood(c, missing) picks what to eat for a gap.
  */
 (function (ERX) {
   'use strict';
@@ -111,6 +113,55 @@
       for (const k of ARMOR) { const it = Items().get(c.equip[k]); if (it && it.def) d += it.def; }
       return d;
     },
+    /** Swap one armour piece (worn, or in the bag) for another: Holt's upgrades. */
+    replace(c, from, to) {
+      this.ensure(c);
+      for (const k of ARMOR) if (c.equip[k] === from) { c.equip[k] = to; this.sync(c); return true; }
+      const i = c.inv.findIndex((s) => s && s.id === from);
+      if (i < 0) return false;
+      c.inv[i] = { id: to, n: 1 };
+      this.sync(c);
+      return true;
+    },
+    /** Every armour piece you've got: what you're wearing first, then the bag. [{ id, worn }] */
+    armorPieces(c) {
+      this.ensure(c);
+      const out = [];
+      for (const k of ARMOR) if (c.equip[k]) out.push({ id: c.equip[k], worn: k });
+      for (const s of c.inv) if (s && Items().get(s.id) && Items().get(s.id).slot && !out.some((o) => o.id === s.id)) out.push({ id: s.id, worn: null });
+      return out;
+    },
+    /** The plain armour id of an item ('armor:iron_helm+2' -> 'iron_helm'), or null. */
+    armorId(id) { const it = id && Items().get(id); return it && it.armor ? it.armor : null; },
+    /** You've got this armour piece, at any upgrade level. */
+    hasArmor(c, aid) { return this.armorPieces(c).some((o) => this.armorId(o.id) === aid); },
+
+    /** How much food is in the bag (every kind). */
+    foodCount(c) {
+      this.ensure(c);
+      let n = 0;
+      for (const s of c.inv) if (s && Items().get(s.id) && Items().get(s.id).food) n += s.n;
+      return n;
+    },
+    /** What to eat to fill a gap of `missing` HP: the biggest that wastes nothing, else the smallest that fills it. */
+    bestFood(c, missing) {
+      this.ensure(c);
+      let under = null, over = null;
+      for (const s of c.inv) {
+        const it = s && Items().get(s.id);
+        if (!it || !it.food) continue;
+        if (it.heal <= missing) { if (!under || it.heal > under.heal) under = { id: s.id, heal: it.heal }; }
+        else if (!over || it.heal < over.heal) over = { id: s.id, heal: it.heal };
+      }
+      return (under || over) ? (under || over).id : null;
+    },
+    /** Eat one (out of the bag). Returns the item, or null if there wasn't one. */
+    eat(c, id) {
+      const it = Items().get(id);
+      if (!it || !it.food || !this.remove(c, id, 1)) return null;
+      return it;
+    },
+
     /** Lose every piece of armour (getting your element is a fresh start). */
     clearArmor(c) {
       this.ensure(c);
@@ -124,12 +175,12 @@
     /** Bring the older fields up to date: items, armorOwned and armor. */
     sync(c) {
       const ids = [], owned = [];
-      const note = (id) => { if (!id) return; if (id.indexOf('armor:') === 0) { if (owned.indexOf(id.slice(6)) === -1) owned.push(id.slice(6)); } else if (ids.indexOf(id) === -1) ids.push(id); };
+      const note = (id) => { if (!id) return; const a = this.armorId(id); if (a) { if (owned.indexOf(a) === -1) owned.push(a); } else if (ids.indexOf(id) === -1) ids.push(id); };
       for (const s of c.inv) if (s) note(s.id);
       for (const k of ARMOR) note(c.equip[k]);
       c.items = ids;
       c.armorOwned = owned;
-      c.armor = c.equip.chest && c.equip.chest.indexOf('armor:') === 0 ? c.equip.chest.slice(6) : null;
+      c.armor = this.armorId(c.equip.chest);
     },
   };
 

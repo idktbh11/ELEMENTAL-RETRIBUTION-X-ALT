@@ -131,13 +131,22 @@
     /** Dashing makes you intangible: nothing can hit you mid-dash. */
     get intangible() { return this.dashT > 0 || this.dashGrace > 0; }
 
-    /** The character's look, plus any armour they're wearing. */
+    /** The character's look, plus any armour they're wearing (js/render/player-side.js draws each piece). */
     get look() {
-      const a = ERX.Armor && ERX.Armor.get(this.character.armor);
-      if (!a) return this.character.look;
-      if (!this._lookA || this._lookA.armor !== a.color || this._lookBase !== this.character.look) {
-        this._lookBase = this.character.look;
-        this._lookA = Object.assign({}, this.character.look, { armor: a.color });
+      const c = this.character, eq = ERX.Inventory ? ERX.Inventory.ensure(c).equip : null;
+      if (!eq) return c.look;
+      const key = eq.head + '|' + eq.chest + '|' + eq.legs + '|' + eq.feet;
+      if (key === 'null|null|null|null') return c.look;
+      if (!this._lookA || this._lookKey !== key || this._lookBase !== c.look) {
+        const part = (k) => (eq[k] && ERX.Items.get(eq[k])) || null;
+        const h = part('head'), ch = part('chest'), lg = part('legs'), ft = part('feet');
+        this._lookBase = c.look;
+        this._lookKey = key;
+        this._lookA = Object.assign({}, c.look, {
+          armor: ch ? ch.look : undefined,
+          helm: h ? h.look : undefined, helmKind: h ? h.tier || 'leather' : undefined,
+          greaves: lg ? lg.look : undefined, boots: ft ? ft.look : undefined,
+        });
       }
       return this._lookA;
     }
@@ -169,9 +178,9 @@
       }
       if (this.invulnT > 0) return 'ignored';
       if (this.ultHold && this.ultHold.safe) return 'ignored';   // mid-cinematic (Reality Collapse): nothing touches you
-      // armour soaks some of every hit (always at least 1 gets through)
+      // armour soaks some of every hit (never more than 70% of it, and always at least 1 gets through)
       const def = ERX.Inventory ? ERX.Inventory.defense(this.character) : 0;
-      if (def) damage = Math.max(1, damage - def);
+      if (def) damage = Math.max(1, damage - Math.min(def, damage * 0.7));
       damage = Math.max(1, Math.round(damage * this.ab.defense()));
       this.ab.ult = Math.min(100, this.ab.ult + damage * 0.8);
       // nobody dies in the tutorial (the Immortality Stone sees to that, later)

@@ -129,17 +129,21 @@
       rect(h[0] - 1, h[1], fist ? 3 : 2, fist ? 3 : 2, back ? skinD : skin);
       if (fist) px(h[0] + 1, h[1], skinL);
     };
+    // armour on the legs and feet (Normalton's armoury): greaves over the trousers, boots over the shoes
+    const gv = look.greaves, bt = look.boots;
     const drawLeg = (leg, back) => {
       const [knee, ankle] = leg;
       const hip = [8 + (back ? -1 : 1), hipY];
-      const col = outfit === 4 ? (back ? outD : out) : back ? pantsD : pants;
+      const col = gv ? (back ? C.shade(gv, -0.32) : gv) : outfit === 4 ? (back ? outD : out) : back ? pantsD : pants;
       stroke(hip[0], hip[1], knee[0], knee[1], col);
       stroke(knee[0], knee[1], ankle[0], ankle[1], col);
-      // shoe, toe pointing forward
-      const sc = back ? '#3e281e' : '#5a3a2a';
+      if (gv && !back) px(knee[0], knee[1], C.shade(gv, 0.35));          // a knee plate, catching the light
+      // shoe (or boot), toe pointing forward
+      const sc = bt ? (back ? C.shade(bt, -0.32) : bt) : back ? '#3e281e' : '#5a3a2a';
+      if (bt) rect(ankle[0] - 1, ankle[1] - 1, 2, 1, back ? C.shade(bt, -0.32) : C.shade(bt, 0.12));   // the boot's cuff, up over the ankle
       rect(ankle[0] - 1, ankle[1], 3, 2, sc);
-      px(ankle[0] + 1, ankle[1] + 1, back ? '#2a1a14' : '#3e281e');
-      if (!back) px(ankle[0] - 1, ankle[1], '#7a523a');
+      px(ankle[0] + 1, ankle[1] + 1, bt ? C.shade(bt, back ? -0.55 : -0.35) : back ? '#2a1a14' : '#3e281e');
+      if (!back) px(ankle[0] - 1, ankle[1], bt ? C.shade(bt, 0.3) : '#7a523a');
     };
 
     // ---------------- back layers ----------------
@@ -293,6 +297,44 @@
       for (let x = 0; x <= 7; x++) { H(x, -1, x < 2 ? '#7a6a5a' : '#6a5a4a'); H(x, 0, '#5a4a3a'); }
       for (let x = 6; x <= 9; x++) H(x, 1, '#4a3a2a');
     }
+    // a helmet (Normalton's armoury): a leather cap, a chain coif or an iron helm, in the armour's colour
+    if (look.helm) {
+      const A = look.helm, AD = C.shade(A, -0.3), AL = C.shade(A, 0.3), ADD = C.shade(A, -0.5), kind = look.helmKind;
+      // no hair sticks up out of the top of a helmet (just the hair: a hand raised over your head stays)
+      const lid = kind === 'iron' ? -3 : kind === 'chain' ? -1 : -2, hairs = [c32(hair), c32(hairD), c32(hairL)];
+      for (let y = -8; y < lid; y++) for (let x = -3; x <= 10; x++) {
+        const bx = Math.round(hx + x) + OX, by = Math.round(hy + y) + OY;
+        if (hairs.indexOf(b.get(bx, by)) !== -1) b.set(bx, by, 0);
+      }
+      if (kind === 'chain') {
+        // a hood of tiny rings: over the top, down the back of the head and neck, framing the face
+        const ring = (x, y) => H(x, y, (x + y) % 2 ? AD : x + y < 2 ? AL : A);
+        for (let x = 1; x <= 6; x++) ring(x, -1);
+        for (let y = 0; y <= 1; y++) for (let x = 0; x <= 7; x++) ring(x, y);
+        for (let y = 2; y <= 7; y++) for (let x = 0; x <= 3; x++) ring(x, y);
+        for (let y = 4; y <= 7; y++) ring(-1, y);
+        for (let y = 2; y <= 6; y++) H(4, y, ADD);                       // the edge of the hood, round your face
+        H(5, 7, AD); H(4, 7, AD);
+      } else if (kind === 'iron') {
+        // a full helm: a ridge on top, a rim, plates over the ears, a nose guard
+        H(3, -3, AL); H(4, -3, A);
+        for (let x = 1; x <= 6; x++) H(x, -2, x === 2 ? AL : A);
+        for (let x = 0; x <= 7; x++) { H(x, -1, x < 3 ? AL : A); H(x, 0, x === 0 ? AD : A); }
+        for (let x = -1; x <= 8; x++) H(x, 1, AD);
+        for (let y = 2; y <= 5; y++) for (let x = 0; x <= 3; x++) H(x, y, x === 3 ? AD : x === 0 ? ADD : A);
+        for (let y = 2; y <= 4; y++) H(7, y, y === 2 ? AL : A);          // the nose guard
+        H(4, 5, A); H(5, 5, AD); H(4, 6, AD);                          // a cheek plate
+        H(2, 0, '#ffffff'); H(1, 3, AL);                               // shine, a rivet
+      } else {
+        // a leather cap: a dome over the top, a dark band round the forehead, a flap over the ear, a chin strap
+        for (let x = 2; x <= 5; x++) H(x, -2, x === 2 ? AL : A);
+        for (let x = 1; x <= 6; x++) H(x, -1, x === 2 ? AL : A);
+        for (let x = 0; x <= 7; x++) H(x, 0, x === 0 ? AD : x === 3 ? AL : x === 5 ? AD : A);
+        for (let x = -1; x <= 8; x++) H(x, 1, ADD);                     // the band (and the brim, out the front)
+        for (let y = 2; y <= 4; y++) for (let x = 0; x <= 2; x++) H(x, y, x === 0 ? AD : y === 4 ? AD : A);
+        H(3, 5, ADD); H(4, 6, ADD);                                     // the chin strap
+      }
+    }
     b.outline(c32(OUTLINE));
     return b;
   }
@@ -323,7 +365,7 @@
     /** A frame for any joint set (floats are rounded; cached by the rounded pixels). */
     frameJoints(look, joints, facing = 1) {
       const p = roundJoints(joints);
-      const key = ['J', look.id || '', look.gender, look.skin, look.hair, look.hairColor, look.eyes, look.outfit, look.outfitColor, look.pants, look.hat || '', look.armor || '', jointKey(p), facing].join(',');
+      const key = ['J', look.id || '', look.gender, look.skin, look.hair, look.hairColor, look.eyes, look.outfit, look.outfitColor, look.pants, look.hat || '', look.armor || '', look.helm || '', look.helmKind || '', look.greaves || '', look.boots || '', jointKey(p), facing].join(',');
       let cv = cache.get(key);
       if (!cv) {
         cv = paintPose(look, p).toCanvas();
@@ -356,7 +398,7 @@
 
     frame(look, pose = 'idle', frame = 0, facing = 1) {
       if (pose === 'walk') pose = 'run';
-      const key = [look.id || '', look.gender, look.skin, look.hair, look.hairColor, look.eyes, look.outfit, look.outfitColor, look.pants, look.hat || '', look.armor || '', pose, frame, facing].join(',');
+      const key = [look.id || '', look.gender, look.skin, look.hair, look.hairColor, look.eyes, look.outfit, look.outfitColor, look.pants, look.hat || '', look.armor || '', look.helm || '', look.helmKind || '', look.greaves || '', look.boots || '', pose, frame, facing].join(',');
       let cv = cache.get(key);
       if (!cv) {
         const buf = pose === 'lie' ? rotate90(paint(look, 'hurt', 0)) : paint(look, pose, frame);

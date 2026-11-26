@@ -86,7 +86,7 @@
     loadLevel(id, opts = {}) {
       const seed = (Date.now() >>> 0) ^ (id === 'cave' ? 0x1234 : 0x5678);
       this.levelId = id;
-      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel, world1: ERX.World1Level, oldcave: ERX.OldCaveLevel, deeper: ERX.DeeperEndsLevel, abyss: ERX.AbyssLevel, village: ERX.VillageLevel }[id] || ERX.DeepEndsLevel;
+      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel, world1: ERX.World1Level, oldcave: ERX.OldCaveLevel, deeper: ERX.DeeperEndsLevel, abyss: ERX.AbyssLevel, village: ERX.VillageLevel }[id] || (ERX.Interiors && ERX.Interiors[id]) || ERX.DeepEndsLevel;
       this.level = new Level(seed);
       if (this.level.prepare) this.level.prepare(this, opts);   // (from what you've done: World 1's old cave, caved in)
       this.backWall = this.level.renderBackWall ? this.level.renderBackWall() : null;
@@ -354,10 +354,11 @@
         const prog = this.character.progress || {};
         // the Checkshot in the square: once it's on, you can recall to the void from here (and jump back down here)
         this.checkshot = { x: L.checkshotX, y: L.floorY, on: !!prog.checkshotVillage, t: 0, onT: 0, flag: 'checkshotVillage' };
-        // the first time (out of the lift), the slime comes down after you; any other time it's already at the gate
+        // the first time (out of the lift), the slime comes down after you, has its say, and hops off to its road
+        // (behind the east gate). Once the gate's open and you've walked up to it, it's there in the gateway for good.
         const first = opts.launch && !prog.normalton;
         const s = this.npcs.find((n) => n.id === 'slime');
-        if (s && !first) { s.hidden = false; s.x = L.slimeX; s.y = L.floorY; s.guard = true; }
+        if (s && !first && prog.slimeGate) { s.hidden = false; s.x = L.slimeX; s.y = L.floorY; s.guard = true; }
         if (opts.launch || opts.fall) {
           // out of the lift (blasted up, then down), or down from the void (through the portal)
           p.placeAt(L.landX, L.floorY - (opts.launch ? 600 : L.fallHeight));
@@ -373,13 +374,40 @@
           ERX.Audio.playMusic('normalton');
           ERX.Audio.setAmbience('village');
           this.banner = { title: 'NORMALTON', sub: 'Population: 31. Suspiciously normal.', t: 0, dur: 4 };
+          ERX.Story.world.villageObjective(this);
+        } else if (opts.at === 'door') {
+          // back out of a door (the inn, the goods store, the armory): on the step, back on the street
+          const d = L.marks.doors.find((dd) => dd.enter === opts.door);
+          p.placeAt(d ? d.x : L.spawn.x, L.floorY);
+          p.facing = 1;
+          L.crater = { x: L.landX };
+          ERX.Audio.playMusic('normalton');
+          ERX.Audio.setAmbience('village');
+          ERX.Story.world.villageObjective(this);
         } else {
           p.placeAt(this.checkshot.on ? L.checkshotX + 20 : L.spawn.x, L.floorY);
           L.crater = { x: L.landX };
           ERX.Audio.playMusic('normalton');
           ERX.Audio.setAmbience('village');
           this.banner = { title: 'NORMALTON', sub: 'Population: 31. Suspiciously normal.', t: 0, dur: 4 };
+          ERX.Story.world.villageObjective(this);
         }
+      } else if (ERX.Interiors && ERX.Interiors[id]) {
+        // INSIDE (js/game/level-interior.js): the Sleepy Goose (upstairs and down), Fenwick's Goods, Greta's Armory
+        const L = this.level;
+        L.game = this;
+        this.stageName = id;
+        this.hudAlpha = 1;
+        this.allowDeath = true;
+        if (this.worldTod === undefined) this.worldTod = 0.12;
+        L.L = ERX.World1Level.lightAt(this.worldTod);
+        this.darkness = L.darknessAt();
+        for (const n of L.npcs) this.npcs.push(Object.assign({ talkIndex: 0, t: Math.random() * 3 }, n));
+        p.placeAt(opts.at === 'stairs' && L.stairsX ? L.stairsX + 20 : (L.doorX || L.spawn.x) + 20, L.floorY);
+        p.facing = 1;
+        ERX.Audio.playMusic(L.music || 'normalton');
+        ERX.Audio.setAmbience(null);
+        if (opts.at !== 'stairs') this.banner = { title: L.title, sub: L.sub, t: 0, dur: 3 };
       } else {
         const L = this.level;
         const at = opts.at === 'hall' ? L.checkpoints[L.checkpoints.length - 1] : opts.at === 'elevator' ? { x: L.elevator.x0 - 24, y: L.elevator.floorY } : L.spawn;
@@ -529,11 +557,35 @@
       this.player.vx = 0;
     }
 
-    /** Fade to another area (elevator arrivals). */
-    travel(id, opts) {
+    /** Fade to another area (elevator arrivals). how 'door': a quick, quiet fade (in and out of buildings, up the stairs). */
+    travel(id, opts, how) {
       if (this.transitioning) return;
       this.transitioning = true;
-      ERX.Scenes.transition('dissolve', 1.2, () => this.loadLevel(id, opts));
+      if (how === 'door') ERX.Scenes.transition('fade', 0.6, () => this.loadLevel(id, opts), { silent: true });
+      else ERX.Scenes.transition('dissolve', 1.2, () => this.loadLevel(id, opts));
+    }
+
+    /** Eat something out of the bag (js/data/items.js food). auto: because your HP got low. */
+    eat(id, auto) {
+      const p = this.player, it = ERX.Inventory.eat(this.character, id);
+      if (!it) return false;
+      const heal = Math.max(0, Math.min(p.maxHp - p.hp, it.heal === Infinity ? p.maxHp : it.heal));
+      p.hp = Math.min(p.maxHp, p.hp + heal);
+      this.eatT = 1.2;
+      ERX.Saves.update(this.character);
+      sfx('eat');
+      this.floatText(p.cx, p.y - 6, '+' + Math.round(heal) + ' HP', '#7af0a0');
+      for (let i = 0; i < 8; i++) this.fx.add({ x: p.cx + p.facing * 4, y: p.y + 8, vx: U.lerp(-40, 40, Math.random()), vy: U.lerp(-90, -20, Math.random()), ay: 300, life: 0.5, color: i % 2 ? it.color || '#f0b868' : '#ffffff', size: 1 });
+      if (auto && !this.ateOnce) { this.ateOnce = true; ERX.Toast.show('Low on HP! You ate ' + it.name + ' from your bag. (Food heals you when you are low.)', { color: '#7af0a0', duration: 3.4 }); }
+      return true;
+    }
+    /** Food in the bag feeds you when you're low (under 30%): the best fit for the gap (js/game/inventory.js bestFood). */
+    _autoEat(dt) {
+      const p = this.player;
+      this.eatT = Math.max(0, (this.eatT || 0) - dt);
+      if (this.state !== 'play' || this.eatT > 0 || p.hp <= 0 || p.hp >= p.maxHp * 0.3) return;
+      const id = ERX.Inventory.bestFood(this.character, p.maxHp - p.hp);
+      if (id) this.eat(id, true);
     }
 
     // ------------------------------------------------ the orb + the reveal
@@ -1082,6 +1134,7 @@
       this.flashT = Math.max(0, (this.flashT || 0) - dt);
       this.hpShown = U.approach(this.hpShown || this.player.hp, this.player.hp, 6, dt);
       if (this.player.hurtT <= 0 && this.player.invulnT <= 0 && this.state === 'play') this.player.hp = Math.min(this.player.maxHp, this.player.hp + dt * 2);
+      this._autoEat(dt);
 
       if (this.rumbleT > 0) {
         this.rumbleT -= dt;
@@ -1173,7 +1226,7 @@
     _updateSlime(n, dt) {
       if (n.hidden) return;
       // leaving (it has somewhere to be): once it's out of sight, or where it was going, it's gone
-      if (n.leaving && !n.air && (n.goX == null || Math.abs(n.x - this.player.cx) > 240)) { n.hidden = true; n.leaving = false; n.goX = null; return; }
+      if (n.leaving && !n.air && (n.goX == null || Math.abs(n.x - this.player.cx) > 240)) { if (Math.abs(n.x - this.player.cx) <= 240) this.dust(n.x, n.y, 8); n.hidden = true; n.leaving = false; n.goX = null; return; }
       const p = this.player, L = this.level;
       if (n.falling || n.air) {
         n.vy = (n.vy || 0) + 900 * dt;
@@ -1285,6 +1338,12 @@
         this.runScript(ERX.Story.void.meetFigure);
       }
 
+      // Normalton's east gate, opened by the mayor: walk up to it and... guess who
+      if (this.levelId === 'village' && !this.script && this.level.gate && this.level.gate.state === 'open') {
+        const pr = this.character.progress || {};
+        if ((pr.gatesOpen || pr.mayorTalk) && !pr.slimeGate && p.cx > this.level.gate.x0 - 56) { this.prompt = null; this.runScript(ERX.Story.world.slimeGate); return; }
+      }
+
       // interact prompts: signs, people, doors, the elevator
       this.prompt = null;
       if (this.script || !p.controls) return;
@@ -1294,6 +1353,13 @@
           if (K.wasPressed('use')) { s.read = true; this.runScript((g) => ERX.Story.cave.readSign(g, s.text)); }
           return;
         }
+      }
+      // (in Normalton, and inside its buildings, doors and stairs come first: somebody pottering past a door shouldn't stop you going in)
+      const first = this.level.interactFirst && this.level.interact ? this.level.interact(this) : null;
+      if (first) {
+        this.prompt = { x: first.x, y: first.y, text: first.text };
+        if (K.wasPressed('use')) first.act(this);
+        return;
       }
       for (const n of this.npcs) {
         if (n.hidden || n.falling || n.air) continue;
